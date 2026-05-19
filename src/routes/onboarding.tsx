@@ -129,6 +129,46 @@ function OnboardingPage() {
     setStep(1);
   }
 
+  async function handleSignIn(loginEmail: string, loginPassword: string) {
+    if (!loginEmail.trim() || !loginPassword) {
+      toast.error("Enter your email and password");
+      return;
+    }
+    setLoading(true);
+    const { data: authData, error } = await supabase.auth.signInWithPassword({
+      email: loginEmail.trim(),
+      password: loginPassword,
+    });
+    if (error || !authData.user) {
+      setLoading(false);
+      toast.error(error?.message ?? "Sign in failed");
+      return;
+    }
+    const userId = authData.user.id;
+    const [{ data: profile }, { data: studentRows }] = await Promise.all([
+      supabase.from("profiles").select("waiver_signed, full_name, phone, email").eq("id", userId).maybeSingle(),
+      supabase.from("students").select("id, name").eq("parent_id", userId),
+    ]);
+    setLoading(false);
+    if (profile) {
+      setFullName(profile.full_name ?? "");
+      setPhone(profile.phone ?? "");
+      setEmail(profile.email ?? loginEmail.trim());
+    }
+    if (studentRows && studentRows.length > 0) {
+      setStudents(studentRows);
+      setSelectedStudentId(studentRows[0].id);
+      setRegisteringChild(true);
+    }
+    if (profile?.waiver_signed) {
+      toast.success("Welcome back! Pick your next lesson.");
+      setStep(3);
+    } else {
+      toast.success("Signed in. Let's finish setting you up.");
+      setStep(1);
+    }
+  }
+
   async function handlePlayerInfo() {
     const { data: { user } } = await supabase.auth.getUser();
     if (!user) {
@@ -270,7 +310,7 @@ function OnboardingPage() {
               email={email} setEmail={setEmail}
               phone={phone} setPhone={setPhone}
               password={password} setPassword={setPassword}
-              onNext={handleSignup} loading={loading}
+              onNext={handleSignup} onSignIn={handleSignIn} loading={loading}
             />
           )}
           {step === 1 && (
@@ -349,8 +389,34 @@ function SignupStep(props: {
   email: string; setEmail: (v: string) => void;
   phone: string; setPhone: (v: string) => void;
   password: string; setPassword: (v: string) => void;
-  onNext: () => void; loading: boolean;
+  onNext: () => void; onSignIn: (email: string, password: string) => void; loading: boolean;
 }) {
+  const [mode, setMode] = useState<"signup" | "login">("signup");
+  const [loginEmail, setLoginEmail] = useState("");
+  const [loginPassword, setLoginPassword] = useState("");
+
+  if (mode === "login") {
+    return (
+      <div className="space-y-5">
+        <div>
+          <h2 className="text-xl font-bold">Welcome back</h2>
+          <p className="text-sm text-muted-foreground">Sign in to book your next lesson.</p>
+        </div>
+        <Field id="loginEmail" label="Email" type="email" value={loginEmail} onChange={setLoginEmail} placeholder="you@example.com" />
+        <Field id="loginPassword" label="Password" type="password" value={loginPassword} onChange={setLoginPassword} placeholder="Your password" />
+        <Button onClick={() => props.onSignIn(loginEmail, loginPassword)} disabled={props.loading} className="w-full" size="lg">
+          {props.loading ? "Signing in..." : "Log In"}
+        </Button>
+        <p className="text-center text-sm text-muted-foreground">
+          New here?{" "}
+          <button type="button" onClick={() => setMode("signup")} className="font-medium text-primary hover:underline">
+            Create an account
+          </button>
+        </p>
+      </div>
+    );
+  }
+
   return (
     <div className="space-y-5">
       <div>
@@ -364,6 +430,12 @@ function SignupStep(props: {
       <Button onClick={props.onNext} disabled={props.loading} className="w-full" size="lg">
         {props.loading ? "Creating account..." : "Continue"}
       </Button>
+      <p className="text-center text-sm text-muted-foreground">
+        Already have an account?{" "}
+        <button type="button" onClick={() => setMode("login")} className="font-medium text-primary hover:underline">
+          Sign in
+        </button>
+      </p>
     </div>
   );
 }
