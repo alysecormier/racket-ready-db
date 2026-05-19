@@ -114,6 +114,9 @@ export type Database = {
           phone: string | null
           role: Database["public"]["Enums"]["user_role"]
           updated_at: string
+          waiver_signature: string | null
+          waiver_signed: boolean
+          waiver_signed_at: string | null
         }
         Insert: {
           created_at?: string
@@ -123,6 +126,9 @@ export type Database = {
           phone?: string | null
           role?: Database["public"]["Enums"]["user_role"]
           updated_at?: string
+          waiver_signature?: string | null
+          waiver_signed?: boolean
+          waiver_signed_at?: string | null
         }
         Update: {
           created_at?: string
@@ -132,6 +138,9 @@ export type Database = {
           phone?: string | null
           role?: Database["public"]["Enums"]["user_role"]
           updated_at?: string
+          waiver_signature?: string | null
+          waiver_signed?: boolean
+          waiver_signed_at?: string | null
         }
         Relationships: []
       }
