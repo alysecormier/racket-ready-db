@@ -1,0 +1,701 @@
+import { createFileRoute, useNavigate, Link } from "@tanstack/react-router";
+import { useEffect, useMemo, useState } from "react";
+import { supabase } from "@/integrations/supabase/client";
+import { useAuth } from "@/hooks/use-auth";
+import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
+import { Card } from "@/components/ui/card";
+import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import { Calendar } from "@/components/ui/calendar";
+import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
+import { Badge } from "@/components/ui/badge";
+import { Textarea } from "@/components/ui/textarea";
+import { Separator } from "@/components/ui/separator";
+import { toast } from "sonner";
+import { Toaster } from "@/components/ui/sonner";
+import {
+  Search, Check, X, Clock, Users, DollarSign, FileSignature,
+  Calendar as CalIcon, ListTodo, Plus, LogOut,
+} from "lucide-react";
+
+export const Route = createFileRoute("/admin")({
+  head: () => ({
+    meta: [
+      { title: "Coach Dashboard — Ace Tennis Academy" },
+      { name: "description", content: "Admin dashboard for tennis coaches." },
+    ],
+  }),
+  component: AdminPage,
+});
+
+type Lesson = {
+  id: string; title: string; start_time: string; end_time: string;
+  capacity: number; price: number;
+};
+type Profile = {
+  id: string; full_name: string | null; email: string | null; phone: string | null;
+  waiver_signed: boolean; waiver_signed_at: string | null;
+};
+type Student = {
+  id: string; name: string; age: number | null; gender: string | null; parent_id: string;
+};
+type Booking = {
+  id: string; lesson_id: string; profile_id: string; student_id: string | null;
+  payment_status: string; signed_waiver: boolean;
+};
+type Waitlist = {
+  id: string; lesson_id: string; profile_id: string; student_id: string | null; joined_at: string;
+};
+
+function AdminPage() {
+  const navigate = useNavigate();
+  const { user, isCoach, loading, refreshRole } = useAuth();
+  const [tab, setTab] = useState("calendar");
+
+  useEffect(() => {
+    if (!loading && !user) navigate({ to: "/login" });
+  }, [loading, user, navigate]);
+
+  if (loading) {
+    return <div className="flex min-h-screen items-center justify-center text-muted-foreground">Loading…</div>;
+  }
+  if (!user) return null;
+
+  if (!isCoach) {
+    return (
+      <div className="flex min-h-screen items-center justify-center bg-gradient-to-br from-background via-secondary/40 to-background p-6">
+        <Toaster richColors position="top-center" />
+        <Card className="max-w-md p-8 text-center">
+          <h1 className="text-xl font-bold">Coach access required</h1>
+          <p className="mt-2 text-sm text-muted-foreground">
+            This area is for coaches only. For demo purposes, you can grant yourself
+            the coach role below.
+          </p>
+          <Button
+            className="mt-5 w-full"
+            onClick={async () => {
+              const { error } = await supabase
+                .from("user_roles")
+                .insert({ user_id: user.id, role: "coach" });
+              if (error && !error.message.includes("duplicate")) {
+                toast.error(error.message);
+                return;
+              }
+              toast.success("You're a coach now!");
+              await refreshRole();
+            }}
+          >
+            Become a coach (demo)
+          </Button>
+          <Button variant="ghost" className="mt-2 w-full" onClick={() => navigate({ to: "/" })}>
+            Back home
+          </Button>
+        </Card>
+      </div>
+    );
+  }
+
+  return (
+    <div className="min-h-screen bg-gradient-to-br from-background via-secondary/30 to-background">
+      <Toaster richColors position="top-center" />
+      <header className="border-b border-border bg-background/80 backdrop-blur">
+        <div className="mx-auto flex max-w-7xl items-center justify-between px-4 py-3 sm:px-6">
+          <Link to="/" className="flex items-center gap-2">
+            <div className="flex h-9 w-9 items-center justify-center rounded-full bg-primary text-lg">🎾</div>
+            <div>
+              <div className="text-sm font-bold leading-tight">Ace Tennis</div>
+              <div className="text-xs text-muted-foreground">Coach Dashboard</div>
+            </div>
+          </Link>
+          <Button
+            variant="ghost" size="sm"
+            onClick={async () => { await supabase.auth.signOut(); navigate({ to: "/login" }); }}
+          >
+            <LogOut className="mr-2 h-4 w-4" /> Sign out
+          </Button>
+        </div>
+      </header>
+
+      <main className="mx-auto max-w-7xl px-4 py-6 sm:px-6 sm:py-8">
+        <Tabs value={tab} onValueChange={setTab} className="space-y-6">
+          <TabsList className="grid w-full grid-cols-3 sm:max-w-xl">
+            <TabsTrigger value="calendar"><CalIcon className="mr-2 h-4 w-4" />Calendar</TabsTrigger>
+            <TabsTrigger value="roster"><Users className="mr-2 h-4 w-4" />Roster</TabsTrigger>
+            <TabsTrigger value="waitlist"><ListTodo className="mr-2 h-4 w-4" />Waitlist</TabsTrigger>
+          </TabsList>
+
+          <TabsContent value="calendar"><CalendarTab /></TabsContent>
+          <TabsContent value="roster"><RosterTab /></TabsContent>
+          <TabsContent value="waitlist"><WaitlistTab /></TabsContent>
+        </Tabs>
+      </main>
+    </div>
+  );
+}
+
+/* ----------------------------------------------------------------- CALENDAR */
+
+function CalendarTab() {
+  const [lessons, setLessons] = useState<Lesson[]>([]);
+  const [selectedDate, setSelectedDate] = useState<Date | undefined>(new Date());
+  const [openLesson, setOpenLesson] = useState<Lesson | null>(null);
+  const [creating, setCreating] = useState(false);
+
+  async function load() {
+    const { data } = await supabase.from("lessons").select("*").order("start_time");
+    setLessons((data ?? []) as Lesson[]);
+  }
+  useEffect(() => { load(); }, []);
+
+  const lessonDates = useMemo(
+    () => lessons.map((l) => new Date(l.start_time)),
+    [lessons]
+  );
+
+  const dayLessons = useMemo(() => {
+    if (!selectedDate) return [];
+    const d = selectedDate.toDateString();
+    return lessons.filter((l) => new Date(l.start_time).toDateString() === d);
+  }, [lessons, selectedDate]);
+
+  async function createDemoLesson() {
+    setCreating(true);
+    const start = new Date(selectedDate ?? new Date());
+    start.setHours(16, 0, 0, 0);
+    const end = new Date(start);
+    end.setHours(17, 0, 0, 0);
+    const { error } = await supabase.from("lessons").insert({
+      title: "Junior Group Clinic",
+      start_time: start.toISOString(),
+      end_time: end.toISOString(),
+      capacity: 4,
+      price: 35,
+    });
+    setCreating(false);
+    if (error) { toast.error(error.message); return; }
+    toast.success("Lesson created");
+    load();
+  }
+
+  return (
+    <div className="grid gap-6 lg:grid-cols-[auto_1fr]">
+      <Card className="p-4">
+        <Calendar
+          mode="single"
+          selected={selectedDate}
+          onSelect={setSelectedDate}
+          modifiers={{ hasLesson: lessonDates }}
+          modifiersClassNames={{
+            hasLesson: "font-bold relative after:absolute after:bottom-1 after:left-1/2 after:-translate-x-1/2 after:h-1 after:w-1 after:rounded-full after:bg-primary",
+          }}
+        />
+        <Button onClick={createDemoLesson} disabled={creating} variant="outline" size="sm" className="mt-3 w-full">
+          <Plus className="mr-2 h-4 w-4" />
+          {creating ? "Adding..." : "Add demo lesson"}
+        </Button>
+      </Card>
+
+      <Card className="p-5">
+        <div className="mb-4 flex items-center justify-between">
+          <div>
+            <h2 className="text-lg font-bold">
+              {selectedDate?.toLocaleDateString(undefined, { weekday: "long", month: "long", day: "numeric" })}
+            </h2>
+            <p className="text-sm text-muted-foreground">{dayLessons.length} lesson{dayLessons.length === 1 ? "" : "s"}</p>
+          </div>
+        </div>
+        {dayLessons.length === 0 ? (
+          <div className="py-12 text-center text-sm text-muted-foreground">No lessons scheduled.</div>
+        ) : (
+          <div className="space-y-2">
+            {dayLessons.map((l) => (
+              <button
+                key={l.id}
+                onClick={() => setOpenLesson(l)}
+                className="flex w-full items-center justify-between rounded-lg border border-border bg-secondary/30 p-3 text-left transition-colors hover:border-primary hover:bg-secondary/60"
+              >
+                <div>
+                  <div className="font-semibold">{l.title}</div>
+                  <div className="mt-0.5 flex items-center gap-3 text-xs text-muted-foreground">
+                    <span className="inline-flex items-center gap-1"><Clock className="h-3 w-3" />
+                      {fmtTime(l.start_time)} – {fmtTime(l.end_time)}
+                    </span>
+                    <span className="inline-flex items-center gap-1"><Users className="h-3 w-3" />Cap {l.capacity}</span>
+                    <span className="inline-flex items-center gap-1"><DollarSign className="h-3 w-3" />${Number(l.price).toFixed(0)}</span>
+                  </div>
+                </div>
+              </button>
+            ))}
+          </div>
+        )}
+      </Card>
+
+      <LessonDialog lesson={openLesson} onClose={() => setOpenLesson(null)} />
+    </div>
+  );
+}
+
+function LessonDialog({ lesson, onClose }: { lesson: Lesson | null; onClose: () => void }) {
+  const [bookings, setBookings] = useState<Booking[]>([]);
+  const [waitlist, setWaitlist] = useState<Waitlist[]>([]);
+  const [profiles, setProfiles] = useState<Record<string, Profile>>({});
+  const [students, setStudents] = useState<Record<string, Student>>({});
+  const [loading, setLoading] = useState(false);
+
+  useEffect(() => {
+    if (!lesson) return;
+    (async () => {
+      setLoading(true);
+      const [b, w] = await Promise.all([
+        supabase.from("bookings").select("*").eq("lesson_id", lesson.id),
+        supabase.from("waitlist").select("*").eq("lesson_id", lesson.id).order("joined_at"),
+      ]);
+      const bookingsData = (b.data ?? []) as Booking[];
+      const waitlistData = (w.data ?? []) as Waitlist[];
+      setBookings(bookingsData);
+      setWaitlist(waitlistData);
+
+      const profileIds = Array.from(new Set([
+        ...bookingsData.map((x) => x.profile_id),
+        ...waitlistData.map((x) => x.profile_id),
+      ]));
+      const studentIds = Array.from(new Set([
+        ...bookingsData.map((x) => x.student_id).filter(Boolean),
+        ...waitlistData.map((x) => x.student_id).filter(Boolean),
+      ] as string[]));
+
+      const [{ data: pData }, { data: sData }] = await Promise.all([
+        profileIds.length
+          ? supabase.from("profiles").select("*").in("id", profileIds)
+          : Promise.resolve({ data: [] }),
+        studentIds.length
+          ? supabase.from("students").select("*").in("id", studentIds)
+          : Promise.resolve({ data: [] }),
+      ]);
+      setProfiles(Object.fromEntries((pData ?? []).map((p: Profile) => [p.id, p])));
+      setStudents(Object.fromEntries((sData ?? []).map((s: Student) => [s.id, s])));
+      setLoading(false);
+    })();
+  }, [lesson]);
+
+  if (!lesson) return null;
+
+  return (
+    <Dialog open={!!lesson} onOpenChange={(v) => !v && onClose()}>
+      <DialogContent className="max-h-[90vh] overflow-y-auto sm:max-w-2xl">
+        <DialogHeader>
+          <DialogTitle className="text-xl">{lesson.title}</DialogTitle>
+          <p className="text-sm text-muted-foreground">
+            {new Date(lesson.start_time).toLocaleString(undefined, {
+              weekday: "long", month: "short", day: "numeric",
+              hour: "numeric", minute: "2-digit",
+            })} • {bookings.length} / {lesson.capacity} booked
+          </p>
+        </DialogHeader>
+
+        {loading ? (
+          <div className="py-8 text-center text-sm text-muted-foreground">Loading…</div>
+        ) : (
+          <div className="space-y-6">
+            <section>
+              <h3 className="mb-2 text-sm font-semibold uppercase tracking-wide text-muted-foreground">
+                Attending ({bookings.length})
+              </h3>
+              {bookings.length === 0 ? (
+                <p className="text-sm text-muted-foreground">No bookings yet.</p>
+              ) : (
+                <div className="space-y-2">
+                  {bookings.map((b) => {
+                    const profile = profiles[b.profile_id];
+                    const student = b.student_id ? students[b.student_id] : null;
+                    const displayName = student?.name ?? profile?.full_name ?? "Unnamed";
+                    return (
+                      <div key={b.id} className="rounded-lg border border-border bg-background p-3">
+                        <div className="flex items-start justify-between gap-3">
+                          <div>
+                            <div className="font-medium">{displayName}</div>
+                            <div className="text-xs text-muted-foreground">
+                              {student?.age != null ? `Age ${student.age}` : "Adult"}
+                              {profile?.full_name && student && ` • Parent: ${profile.full_name}`}
+                            </div>
+                          </div>
+                          <div className="flex flex-col items-end gap-1">
+                            <PaymentBadge status={b.payment_status} />
+                            <WaiverBadge signed={b.signed_waiver || profile?.waiver_signed} />
+                          </div>
+                        </div>
+                      </div>
+                    );
+                  })}
+                </div>
+              )}
+            </section>
+
+            <Separator />
+
+            <section>
+              <h3 className="mb-2 text-sm font-semibold uppercase tracking-wide text-muted-foreground">
+                Waitlist ({waitlist.length})
+              </h3>
+              {waitlist.length === 0 ? (
+                <p className="text-sm text-muted-foreground">Empty.</p>
+              ) : (
+                <ol className="space-y-2">
+                  {waitlist.map((w, i) => {
+                    const profile = profiles[w.profile_id];
+                    const student = w.student_id ? students[w.student_id] : null;
+                    return (
+                      <li key={w.id} className="flex items-center gap-3 rounded-lg border border-border bg-secondary/30 p-3">
+                        <div className="flex h-7 w-7 items-center justify-center rounded-full bg-primary text-xs font-bold text-primary-foreground">
+                          {i + 1}
+                        </div>
+                        <div className="flex-1">
+                          <div className="text-sm font-medium">
+                            {student?.name ?? profile?.full_name ?? "Unknown"}
+                          </div>
+                          <div className="text-xs text-muted-foreground">
+                            Joined {new Date(w.joined_at).toLocaleDateString()}
+                          </div>
+                        </div>
+                      </li>
+                    );
+                  })}
+                </ol>
+              )}
+            </section>
+          </div>
+        )}
+      </DialogContent>
+    </Dialog>
+  );
+}
+
+function PaymentBadge({ status }: { status: string }) {
+  const paid = status === "paid";
+  return (
+    <Badge variant={paid ? "default" : "secondary"} className="gap-1">
+      <DollarSign className="h-3 w-3" />
+      {paid ? "Paid" : status === "pending" ? "Pending" : status}
+    </Badge>
+  );
+}
+function WaiverBadge({ signed }: { signed: boolean | undefined }) {
+  return (
+    <Badge variant={signed ? "default" : "destructive"} className="gap-1">
+      <FileSignature className="h-3 w-3" />
+      {signed ? "Signed" : "Unsigned"}
+    </Badge>
+  );
+}
+
+/* ------------------------------------------------------------------- ROSTER */
+
+function RosterTab() {
+  const [clients, setClients] = useState<Profile[]>([]);
+  const [q, setQ] = useState("");
+  const [selected, setSelected] = useState<Profile | null>(null);
+
+  useEffect(() => {
+    supabase.from("profiles").select("*").order("full_name").then(({ data }) => {
+      setClients((data ?? []) as Profile[]);
+    });
+  }, []);
+
+  const filtered = clients.filter((c) => {
+    if (!q.trim()) return true;
+    const s = q.toLowerCase();
+    return (
+      c.full_name?.toLowerCase().includes(s) ||
+      c.email?.toLowerCase().includes(s) ||
+      c.phone?.toLowerCase().includes(s)
+    );
+  });
+
+  return (
+    <div className="grid gap-6 lg:grid-cols-[360px_1fr]">
+      <Card className="p-4">
+        <div className="relative mb-3">
+          <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
+          <Input
+            value={q} onChange={(e) => setQ(e.target.value)}
+            placeholder="Search clients..." className="pl-9"
+          />
+        </div>
+        <div className="space-y-1 overflow-y-auto" style={{ maxHeight: "60vh" }}>
+          {filtered.length === 0 && (
+            <p className="py-6 text-center text-sm text-muted-foreground">No clients.</p>
+          )}
+          {filtered.map((c) => (
+            <button
+              key={c.id}
+              onClick={() => setSelected(c)}
+              className={`w-full rounded-md p-3 text-left transition-colors ${
+                selected?.id === c.id ? "bg-primary/10 border border-primary/30" : "hover:bg-secondary/60"
+              }`}
+            >
+              <div className="flex items-center justify-between gap-2">
+                <div className="min-w-0">
+                  <div className="truncate font-medium">{c.full_name || "Unnamed"}</div>
+                  <div className="truncate text-xs text-muted-foreground">{c.email}</div>
+                </div>
+                {c.waiver_signed ? (
+                  <Check className="h-4 w-4 flex-shrink-0 text-primary" />
+                ) : (
+                  <X className="h-4 w-4 flex-shrink-0 text-destructive" />
+                )}
+              </div>
+            </button>
+          ))}
+        </div>
+      </Card>
+
+      <div>
+        {selected ? <ClientDetail key={selected.id} client={selected} /> : (
+          <Card className="flex h-full min-h-[300px] items-center justify-center p-8 text-sm text-muted-foreground">
+            Select a client to view details
+          </Card>
+        )}
+      </div>
+    </div>
+  );
+}
+
+function ClientDetail({ client }: { client: Profile }) {
+  const { user } = useAuth();
+  const [students, setStudents] = useState<Student[]>([]);
+  const [notes, setNotes] = useState<{ id: string; note: string; created_at: string }[]>([]);
+  const [draft, setDraft] = useState("");
+  const [saving, setSaving] = useState(false);
+
+  async function loadNotes() {
+    const { data } = await supabase
+      .from("coach_notes").select("id, note, created_at")
+      .eq("client_id", client.id).order("created_at", { ascending: false });
+    setNotes(data ?? []);
+  }
+
+  useEffect(() => {
+    supabase.from("students").select("*").eq("parent_id", client.id)
+      .then(({ data }) => setStudents((data ?? []) as Student[]));
+    loadNotes();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [client.id]);
+
+  async function saveNote() {
+    if (!draft.trim() || !user) return;
+    setSaving(true);
+    const { error } = await supabase.from("coach_notes").insert({
+      client_id: client.id, coach_id: user.id, note: draft.trim(),
+    });
+    setSaving(false);
+    if (error) { toast.error(error.message); return; }
+    setDraft("");
+    toast.success("Note saved");
+    loadNotes();
+  }
+
+  return (
+    <Card className="p-5 sm:p-6 space-y-6">
+      <div className="flex items-start justify-between gap-4">
+        <div>
+          <h2 className="text-xl font-bold">{client.full_name || "Unnamed"}</h2>
+          <div className="mt-1 space-y-0.5 text-sm text-muted-foreground">
+            <div>{client.email}</div>
+            <div>{client.phone || "No phone"}</div>
+          </div>
+        </div>
+        <div className="text-right">
+          <div className="text-xs uppercase tracking-wide text-muted-foreground">Waiver</div>
+          {client.waiver_signed ? (
+            <div className="mt-1 inline-flex items-center gap-1.5 rounded-full bg-primary/15 px-3 py-1 text-sm font-semibold text-primary">
+              <Check className="h-4 w-4" /> Signed
+            </div>
+          ) : (
+            <div className="mt-1 inline-flex items-center gap-1.5 rounded-full bg-destructive/15 px-3 py-1 text-sm font-semibold text-destructive">
+              <X className="h-4 w-4" /> Unsigned
+            </div>
+          )}
+        </div>
+      </div>
+
+      <Separator />
+
+      <section>
+        <h3 className="mb-2 text-sm font-semibold uppercase tracking-wide text-muted-foreground">
+          Children ({students.length})
+        </h3>
+        {students.length === 0 ? (
+          <p className="text-sm text-muted-foreground">No children registered.</p>
+        ) : (
+          <div className="grid gap-2 sm:grid-cols-2">
+            {students.map((s) => (
+              <div key={s.id} className="rounded-lg border border-border bg-secondary/30 p-3">
+                <div className="font-medium">{s.name}</div>
+                <div className="text-xs text-muted-foreground">
+                  {s.age != null ? `Age ${s.age}` : "—"}{s.gender ? ` • ${s.gender}` : ""}
+                </div>
+              </div>
+            ))}
+          </div>
+        )}
+      </section>
+
+      <Separator />
+
+      <section>
+        <h3 className="mb-2 text-sm font-semibold uppercase tracking-wide text-muted-foreground">
+          Coach notes
+        </h3>
+        <div className="space-y-2">
+          <Textarea
+            value={draft} onChange={(e) => setDraft(e.target.value)}
+            placeholder="Add a note about this client..."
+            rows={3} maxLength={2000}
+          />
+          <Button onClick={saveNote} disabled={!draft.trim() || saving} size="sm">
+            {saving ? "Saving..." : "Save Note"}
+          </Button>
+        </div>
+        <div className="mt-4 space-y-3">
+          {notes.length === 0 ? (
+            <p className="text-sm text-muted-foreground">No notes yet.</p>
+          ) : (
+            notes.map((n) => (
+              <div key={n.id} className="rounded-lg border border-border bg-background p-3">
+                <div className="whitespace-pre-wrap text-sm">{n.note}</div>
+                <div className="mt-1.5 text-xs text-muted-foreground">
+                  {new Date(n.created_at).toLocaleString()}
+                </div>
+              </div>
+            ))
+          )}
+        </div>
+      </section>
+    </Card>
+  );
+}
+
+/* ----------------------------------------------------------------- WAITLIST */
+
+function WaitlistTab() {
+  const [items, setItems] = useState<
+    { lesson: Lesson; bookedCount: number; entries: (Waitlist & { profile?: Profile; student?: Student })[] }[]
+  >([]);
+  const [loading, setLoading] = useState(true);
+
+  useEffect(() => {
+    (async () => {
+      const [{ data: lessons }, { data: bookings }, { data: waitlist }] = await Promise.all([
+        supabase.from("lessons").select("*").order("start_time"),
+        supabase.from("bookings").select("lesson_id"),
+        supabase.from("waitlist").select("*").order("joined_at"),
+      ]);
+
+      const bookCounts: Record<string, number> = {};
+      (bookings ?? []).forEach((b: { lesson_id: string }) => {
+        bookCounts[b.lesson_id] = (bookCounts[b.lesson_id] ?? 0) + 1;
+      });
+
+      const fullLessons = (lessons ?? []).filter(
+        (l: Lesson) => (bookCounts[l.id] ?? 0) >= l.capacity
+      );
+
+      const wlByLesson: Record<string, Waitlist[]> = {};
+      (waitlist ?? []).forEach((w: Waitlist) => {
+        (wlByLesson[w.lesson_id] ??= []).push(w);
+      });
+
+      const profileIds = Array.from(new Set((waitlist ?? []).map((w: Waitlist) => w.profile_id)));
+      const studentIds = Array.from(new Set(
+        (waitlist ?? []).map((w: Waitlist) => w.student_id).filter(Boolean) as string[]
+      ));
+
+      const [{ data: profiles }, { data: students }] = await Promise.all([
+        profileIds.length ? supabase.from("profiles").select("*").in("id", profileIds) : Promise.resolve({ data: [] }),
+        studentIds.length ? supabase.from("students").select("*").in("id", studentIds) : Promise.resolve({ data: [] }),
+      ]);
+      const pMap = Object.fromEntries((profiles ?? []).map((p: Profile) => [p.id, p]));
+      const sMap = Object.fromEntries((students ?? []).map((s: Student) => [s.id, s]));
+
+      setItems(
+        fullLessons.map((lesson: Lesson) => ({
+          lesson,
+          bookedCount: bookCounts[lesson.id] ?? 0,
+          entries: (wlByLesson[lesson.id] ?? []).map((w) => ({
+            ...w,
+            profile: pMap[w.profile_id],
+            student: w.student_id ? sMap[w.student_id] : undefined,
+          })),
+        }))
+      );
+      setLoading(false);
+    })();
+  }, []);
+
+  if (loading) {
+    return <Card className="p-8 text-center text-sm text-muted-foreground">Loading waitlists…</Card>;
+  }
+
+  if (items.length === 0) {
+    return (
+      <Card className="p-12 text-center">
+        <ListTodo className="mx-auto h-10 w-10 text-muted-foreground" />
+        <h3 className="mt-3 font-semibold">No lessons at capacity</h3>
+        <p className="mt-1 text-sm text-muted-foreground">All scheduled lessons still have open spots.</p>
+      </Card>
+    );
+  }
+
+  return (
+    <div className="space-y-4">
+      {items.map(({ lesson, bookedCount, entries }) => (
+        <Card key={lesson.id} className="p-5">
+          <div className="mb-4 flex items-start justify-between gap-3">
+            <div>
+              <h3 className="text-lg font-bold">{lesson.title}</h3>
+              <div className="mt-0.5 flex flex-wrap items-center gap-3 text-xs text-muted-foreground">
+                <span className="inline-flex items-center gap-1">
+                  <CalIcon className="h-3 w-3" />
+                  {new Date(lesson.start_time).toLocaleString(undefined, {
+                    weekday: "short", month: "short", day: "numeric",
+                    hour: "numeric", minute: "2-digit",
+                  })}
+                </span>
+                <Badge variant="destructive">Full · {bookedCount}/{lesson.capacity}</Badge>
+              </div>
+            </div>
+            <Badge variant="secondary">{entries.length} waiting</Badge>
+          </div>
+
+          {entries.length === 0 ? (
+            <p className="text-sm text-muted-foreground">Nobody on the waitlist.</p>
+          ) : (
+            <ol className="space-y-2">
+              {entries.map((e, i) => (
+                <li key={e.id} className="flex items-center gap-3 rounded-lg border border-border bg-secondary/30 p-3">
+                  <div className="flex h-8 w-8 items-center justify-center rounded-full bg-primary text-sm font-bold text-primary-foreground">
+                    {i + 1}
+                  </div>
+                  <div className="flex-1">
+                    <div className="font-medium">
+                      {e.student?.name ?? e.profile?.full_name ?? "Unknown"}
+                    </div>
+                    <div className="text-xs text-muted-foreground">
+                      {e.profile?.email} • Joined {new Date(e.joined_at).toLocaleString()}
+                    </div>
+                  </div>
+                </li>
+              ))}
+            </ol>
+          )}
+        </Card>
+      ))}
+    </div>
+  );
+}
+
+/* ------------------------------------------------------------------- UTILS */
+
+function fmtTime(iso: string) {
+  return new Date(iso).toLocaleTimeString(undefined, { hour: "numeric", minute: "2-digit" });
+}
