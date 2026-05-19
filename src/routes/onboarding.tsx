@@ -97,6 +97,7 @@ function OnboardingPage() {
 
   // saved card on file (mock)
   const [savedCardLast4, setSavedCardLast4] = useState<string | null>(null);
+  const [returningClient, setReturningClient] = useState(false);
 
   // On mount: if already signed in & waiver complete, jump to lesson select
   useEffect(() => {
