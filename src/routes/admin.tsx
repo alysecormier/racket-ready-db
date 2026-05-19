@@ -49,52 +49,32 @@ type Waitlist = {
   id: string; lesson_id: string; profile_id: string; student_id: string | null; joined_at: string;
 };
 
+const COACH_EMAIL = "alysemcormier@gmail.com";
+
 function AdminPage() {
   const navigate = useNavigate();
-  const { user, isCoach, loading, refreshRole } = useAuth();
+  const { user, isCoach, loading } = useAuth();
   const [tab, setTab] = useState("calendar");
 
+  // Strict guard: must be authenticated AS the owner coach AND have the coach role.
+  // Anyone else gets signed out and bounced to /login — even by guessing the URL.
   useEffect(() => {
-    if (!loading && !user) navigate({ to: "/login" });
-  }, [loading, user, navigate]);
+    if (loading) return;
+    if (!user) {
+      navigate({ to: "/login" });
+      return;
+    }
+    const emailOk = user.email?.toLowerCase() === COACH_EMAIL;
+    if (!emailOk || !isCoach) {
+      supabase.auth.signOut().finally(() => navigate({ to: "/login" }));
+    }
+  }, [loading, user, isCoach, navigate]);
 
-  if (loading) {
+  if (loading || !user) {
     return <div className="flex min-h-screen items-center justify-center text-muted-foreground">Loading…</div>;
   }
-  if (!user) return null;
-
-  if (!isCoach) {
-    return (
-      <div className="flex min-h-screen items-center justify-center bg-gradient-to-br from-background via-secondary/40 to-background p-6">
-        <Toaster richColors position="top-center" />
-        <Card className="max-w-md p-8 text-center">
-          <h1 className="text-xl font-bold">Coach access required</h1>
-          <p className="mt-2 text-sm text-muted-foreground">
-            This area is for coaches only. For demo purposes, you can grant yourself
-            the coach role below.
-          </p>
-          <Button
-            className="mt-5 w-full"
-            onClick={async () => {
-              const { error } = await supabase
-                .from("user_roles")
-                .insert({ user_id: user.id, role: "coach" });
-              if (error && !error.message.includes("duplicate")) {
-                toast.error(error.message);
-                return;
-              }
-              toast.success("You're a coach now!");
-              await refreshRole();
-            }}
-          >
-            Become a coach (demo)
-          </Button>
-          <Button variant="ghost" className="mt-2 w-full" onClick={() => navigate({ to: "/" })}>
-            Back home
-          </Button>
-        </Card>
-      </div>
-    );
+  if (user.email?.toLowerCase() !== COACH_EMAIL || !isCoach) {
+    return null;
   }
 
   return (
