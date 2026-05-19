@@ -600,14 +600,56 @@ function LessonStep(props: {
   students: Student[];
   selectedStudentId: string | null;
   setSelectedStudentId: (v: string) => void;
+  returningClient: boolean;
   onBack: () => void;
   onNext: () => void;
 }) {
+  const [view, setView] = useState<"calendar" | "list">(props.returningClient ? "calendar" : "list");
+  const [waitlistJoining, setWaitlistJoining] = useState<string | null>(null);
+  const [waitlistedIds, setWaitlistedIds] = useState<Set<string>>(new Set());
+
+  const selected = props.lessons.find((l) => l.id === props.selectedLessonId) ?? null;
+
+  async function joinWaitlist(lessonId: string) {
+    setWaitlistJoining(lessonId);
+    try {
+      const { data: { user } } = await supabase.auth.getUser();
+      if (!user) { toast.error("Please sign in first"); return; }
+      const { error } = await supabase.from("waitlist").insert({
+        lesson_id: lessonId,
+        profile_id: user.id,
+        student_id: props.selectedStudentId,
+      });
+      if (error) { toast.error(error.message); return; }
+      setWaitlistedIds((s) => new Set(s).add(lessonId));
+      toast.success("You're on the waitlist — we'll notify you if a spot opens.");
+    } finally {
+      setWaitlistJoining(null);
+    }
+  }
+
   return (
     <div className="space-y-5">
-      <div>
-        <h2 className="text-xl font-bold">Pick a lesson</h2>
-        <p className="text-sm text-muted-foreground">Choose an available time slot to book.</p>
+      <div className="flex flex-wrap items-start justify-between gap-3">
+        <div>
+          <h2 className="text-xl font-bold">Pick a lesson</h2>
+          <p className="text-sm text-muted-foreground">Choose an available time slot to book.</p>
+        </div>
+        <ToggleGroup
+          type="single"
+          value={view}
+          onValueChange={(v) => v && setView(v as "calendar" | "list")}
+          variant="outline"
+          size="sm"
+          className="bg-secondary/40 rounded-md p-0.5"
+        >
+          <ToggleGroupItem value="calendar" className="gap-1.5">
+            <CalendarRange className="h-4 w-4" /> Calendar
+          </ToggleGroupItem>
+          <ToggleGroupItem value="list" className="gap-1.5">
+            <LayoutGrid className="h-4 w-4" /> List
+          </ToggleGroupItem>
+        </ToggleGroup>
       </div>
 
       {props.students.length > 0 && (
@@ -631,6 +673,15 @@ function LessonStep(props: {
         <div className="rounded-lg border border-dashed border-border p-8 text-center text-sm text-muted-foreground">
           No upcoming lessons available yet. Please check back soon.
         </div>
+      ) : view === "calendar" ? (
+        <CalendarView
+          lessons={props.lessons}
+          selectedLessonId={props.selectedLessonId}
+          onSelect={props.setSelectedLessonId}
+          onJoinWaitlist={joinWaitlist}
+          waitlistJoining={waitlistJoining}
+          waitlistedIds={waitlistedIds}
+        />
       ) : (
         <div className="space-y-2">
           {props.lessons.map((l) => {
@@ -679,7 +730,141 @@ function LessonStep(props: {
         </div>
       )}
 
+      {selected && (
+        <div className="rounded-lg border-2 border-primary/40 bg-primary/5 p-4">
+          <div className="text-xs uppercase tracking-wide text-primary/80 font-semibold">Selected</div>
+          <div className="mt-1 flex items-start justify-between gap-3">
+            <div className="min-w-0">
+              <div className="font-semibold truncate">{selected.title}</div>
+              <div className="text-xs text-muted-foreground mt-0.5">
+                {new Date(selected.start_time).toLocaleString(undefined, {
+                  weekday: "short", month: "short", day: "numeric",
+                  hour: "numeric", minute: "2-digit",
+                })}
+                {" – "}
+                {new Date(selected.end_time).toLocaleTimeString(undefined, { hour: "numeric", minute: "2-digit" })}
+              </div>
+            </div>
+            <div className="text-lg font-bold text-primary">${selected.price.toFixed(2)}</div>
+          </div>
+        </div>
+      )}
+
       <NavRow onBack={props.onBack} onNext={props.onNext} loading={false} nextLabel="Continue to payment" />
+    </div>
+  );
+}
+
+function CalendarView(props: {
+  lessons: Lesson[];
+  selectedLessonId: string | null;
+  onSelect: (id: string) => void;
+  onJoinWaitlist: (id: string) => void;
+  waitlistJoining: string | null;
+  waitlistedIds: Set<string>;
+}) {
+  // Build a week starting on the Monday of the first lesson's week (or current week).
+  const first = props.lessons[0] ? new Date(props.lessons[0].start_time) : new Date();
+  const weekStart = new Date(first);
+  const day = (weekStart.getDay() + 6) % 7; // 0 = Monday
+  weekStart.setDate(weekStart.getDate() - day);
+  weekStart.setHours(0, 0, 0, 0);
+
+  const days: { date: Date; lessons: Lesson[] }[] = Array.from({ length: 7 }, (_, i) => {
+    const d = new Date(weekStart);
+    d.setDate(weekStart.getDate() + i);
+    const next = new Date(d);
+    next.setDate(d.getDate() + 1);
+    return {
+      date: d,
+      lessons: props.lessons
+        .filter((l) => {
+          const t = new Date(l.start_time);
+          return t >= d && t < next;
+        })
+        .sort((a, b) => +new Date(a.start_time) - +new Date(b.start_time)),
+    };
+  });
+
+  return (
+    <div className="overflow-x-auto -mx-1 px-1">
+      <div className="grid grid-cols-7 gap-1.5 min-w-[640px]">
+        {days.map(({ date, lessons }) => (
+          <div key={date.toISOString()} className="flex flex-col gap-1.5">
+            <div className="text-center py-1.5 rounded-md bg-secondary/40 border border-border">
+              <div className="text-[10px] uppercase tracking-wide text-muted-foreground font-medium">
+                {date.toLocaleDateString(undefined, { weekday: "short" })}
+              </div>
+              <div className="text-sm font-bold">
+                {date.toLocaleDateString(undefined, { month: "short", day: "numeric" })}
+              </div>
+            </div>
+            <div className="flex flex-col gap-1.5 min-h-[80px]">
+              {lessons.length === 0 ? (
+                <div className="flex-1 rounded-md border border-dashed border-border/60 p-2 text-center text-[10px] text-muted-foreground/60">
+                  —
+                </div>
+              ) : (
+                lessons.map((l) => {
+                  const isFull = l.booked >= l.capacity;
+                  const isSelected = l.id === props.selectedLessonId;
+                  const t = new Date(l.start_time);
+                  const time = t.toLocaleTimeString(undefined, { hour: "numeric", minute: "2-digit" });
+                  const waitlisted = props.waitlistedIds.has(l.id);
+                  if (isFull) {
+                    return (
+                      <div
+                        key={l.id}
+                        className="rounded-md border border-border bg-muted/50 p-2 text-left"
+                      >
+                        <div className="text-[10px] font-semibold text-muted-foreground">{time}</div>
+                        <div className="text-xs font-medium text-muted-foreground line-clamp-2 mt-0.5">
+                          {l.title}
+                        </div>
+                        <Badge variant="secondary" className="mt-1 text-[9px] px-1.5 py-0">Full {l.booked}/{l.capacity}</Badge>
+                        {waitlisted ? (
+                          <div className="mt-1 text-[10px] font-medium text-primary">✓ On waitlist</div>
+                        ) : (
+                          <button
+                            type="button"
+                            onClick={() => props.onJoinWaitlist(l.id)}
+                            disabled={props.waitlistJoining === l.id}
+                            className="mt-1 text-[10px] font-medium text-primary hover:underline disabled:opacity-50"
+                          >
+                            {props.waitlistJoining === l.id ? "Joining…" : "Join Waitlist"}
+                          </button>
+                        )}
+                      </div>
+                    );
+                  }
+                  return (
+                    <button
+                      key={l.id}
+                      type="button"
+                      onClick={() => props.onSelect(l.id)}
+                      className={`rounded-md border-2 p-2 text-left transition-all ${
+                        isSelected
+                          ? "border-primary bg-primary text-primary-foreground shadow-md"
+                          : "border-border bg-background hover:border-primary/50 hover:bg-secondary/40"
+                      }`}
+                    >
+                      <div className={`text-[10px] font-semibold ${isSelected ? "text-primary-foreground/90" : "text-muted-foreground"}`}>
+                        {time}
+                      </div>
+                      <div className="text-xs font-semibold line-clamp-2 mt-0.5">
+                        {l.title}
+                      </div>
+                      <div className={`text-[10px] mt-0.5 ${isSelected ? "text-primary-foreground/80" : "text-muted-foreground"}`}>
+                        ${l.price.toFixed(0)} · {l.booked}/{l.capacity}
+                      </div>
+                    </button>
+                  );
+                })
+              )}
+            </div>
+          </div>
+        ))}
+      </div>
     </div>
   );
 }
