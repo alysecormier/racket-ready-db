@@ -310,7 +310,7 @@ function OnboardingPage() {
               email={email} setEmail={setEmail}
               phone={phone} setPhone={setPhone}
               password={password} setPassword={setPassword}
-              onNext={handleSignup} loading={loading}
+              onNext={handleSignup} onSignIn={handleSignIn} loading={loading}
             />
           )}
           {step === 1 && (
