@@ -34,6 +34,11 @@ function Index() {
         <Link to="/onboarding" className="mt-8 w-full sm:w-auto">
           <Button size="lg" className="w-full sm:w-auto px-8">Get Started</Button>
         </Link>
+        <div className="mt-4 flex gap-4 text-sm text-muted-foreground">
+          <Link to="/login" className="hover:text-foreground hover:underline">Sign in</Link>
+          <span>·</span>
+          <Link to="/admin" className="hover:text-foreground hover:underline">Coach dashboard</Link>
+        </div>
       </div>
     </main>
   );
