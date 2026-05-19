@@ -129,6 +129,46 @@ function OnboardingPage() {
     setStep(1);
   }
 
+  async function handleSignIn(loginEmail: string, loginPassword: string) {
+    if (!loginEmail.trim() || !loginPassword) {
+      toast.error("Enter your email and password");
+      return;
+    }
+    setLoading(true);
+    const { data: authData, error } = await supabase.auth.signInWithPassword({
+      email: loginEmail.trim(),
+      password: loginPassword,
+    });
+    if (error || !authData.user) {
+      setLoading(false);
+      toast.error(error?.message ?? "Sign in failed");
+      return;
+    }
+    const userId = authData.user.id;
+    const [{ data: profile }, { data: studentRows }] = await Promise.all([
+      supabase.from("profiles").select("waiver_signed, full_name, phone, email").eq("id", userId).maybeSingle(),
+      supabase.from("students").select("id, name").eq("parent_id", userId),
+    ]);
+    setLoading(false);
+    if (profile) {
+      setFullName(profile.full_name ?? "");
+      setPhone(profile.phone ?? "");
+      setEmail(profile.email ?? loginEmail.trim());
+    }
+    if (studentRows && studentRows.length > 0) {
+      setStudents(studentRows);
+      setSelectedStudentId(studentRows[0].id);
+      setRegisteringChild(true);
+    }
+    if (profile?.waiver_signed) {
+      toast.success("Welcome back! Pick your next lesson.");
+      setStep(3);
+    } else {
+      toast.success("Signed in. Let's finish setting you up.");
+      setStep(1);
+    }
+  }
+
   async function handlePlayerInfo() {
     const { data: { user } } = await supabase.auth.getUser();
     if (!user) {
