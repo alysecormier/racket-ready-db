@@ -68,6 +68,16 @@ export const payWithSavedCard = createServerFn({ method: "POST" })
   })
   .handler(async ({ data, context }) => {
     const { supabase, userId } = context;
+    // Coach-only: this is a dev/demo bypass that mints paid bookings
+    // without charging Stripe. Never expose to regular clients.
+    const { data: roleRow } = await supabase
+      .from("user_roles")
+      .select("role")
+      .eq("user_id", userId)
+      .eq("role", "coach")
+      .maybeSingle();
+    if (!roleRow) throw new Error("Coach only");
+
     const { data: profile } = await supabase
       .from("profiles")
       .select("stripe_customer_id, saved_card_last4, waiver_signed")
@@ -76,7 +86,10 @@ export const payWithSavedCard = createServerFn({ method: "POST" })
     if (!profile?.stripe_customer_id || !profile?.saved_card_last4) {
       throw new Error("No saved payment method");
     }
-    const { error } = await supabase.from("bookings").insert({
+    // Use admin client to bypass the new bookings guard trigger that
+    // forces non-coach inserts to payment_status='pending'. This whole
+    // function is gated by the coach role check above.
+    const { error } = await supabaseAdmin.from("bookings").insert({
       lesson_id: data.lessonId,
       profile_id: userId,
       student_id: data.studentId ?? null,
