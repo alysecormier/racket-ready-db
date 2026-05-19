@@ -93,6 +93,42 @@ function OnboardingPage() {
   const [selectedLessonId, setSelectedLessonId] = useState<string | null>(null);
   const [selectedStudentId, setSelectedStudentId] = useState<string | null>(null);
 
+  // saved card on file (mock)
+  const [savedCardLast4, setSavedCardLast4] = useState<string | null>(null);
+
+  // On mount: if already signed in & waiver complete, jump to lesson select
+  useEffect(() => {
+    let cancelled = false;
+    (async () => {
+      const { data: { user } } = await supabase.auth.getUser();
+      if (!user || cancelled) return;
+      const [{ data: profile }, { data: studentRows }] = await Promise.all([
+        supabase
+          .from("profiles")
+          .select("waiver_signed, full_name, phone, email, saved_card_last4, stripe_customer_id")
+          .eq("id", user.id)
+          .maybeSingle(),
+        supabase.from("students").select("id, name").eq("parent_id", user.id),
+      ]);
+      if (cancelled) return;
+      if (profile) {
+        setFullName(profile.full_name ?? "");
+        setPhone(profile.phone ?? "");
+        setEmail(profile.email ?? user.email ?? "");
+        if (profile.saved_card_last4 && profile.stripe_customer_id) {
+          setSavedCardLast4(profile.saved_card_last4);
+        }
+      }
+      if (studentRows && studentRows.length > 0) {
+        setStudents(studentRows);
+        setSelectedStudentId(studentRows[0].id);
+        setRegisteringChild(true);
+      }
+      if (profile?.waiver_signed) setStep(3);
+    })();
+    return () => { cancelled = true; };
+  }, []);
+
   const updateChild = (i: number, patch: Partial<Child>) =>
     setChildren((arr) => arr.map((c, idx) => (idx === i ? { ...c, ...patch } : c)));
   const addChild = () => setChildren((a) => [...a, { name: "", age: "", gender: "" }]);
