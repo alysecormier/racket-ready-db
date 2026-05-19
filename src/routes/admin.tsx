@@ -144,7 +144,7 @@ function DevTools() {
   async function run() {
     setBusy(true);
     try {
-      const res = await simulate({});
+      const res = await simulate();
       setInfo({ email: res.email, password: res.password });
       toast.success("John Doe is ready. Sign in to test.");
     } catch (e) {
