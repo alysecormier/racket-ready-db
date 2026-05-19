@@ -207,6 +207,7 @@ function OnboardingPage() {
     }
     if (profile?.waiver_signed) {
       toast.success("Welcome back! Pick your next lesson.");
+      setReturningClient(true);
       setStep(3);
     } else {
       toast.success("Signed in. Let's finish setting you up.");
