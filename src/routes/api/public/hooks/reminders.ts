@@ -2,6 +2,7 @@ import { createFileRoute } from "@tanstack/react-router";
 import { createClient } from "@supabase/supabase-js";
 import type { Database } from "@/integrations/supabase/types";
 import { sendSms } from "@/lib/twilio.server";
+import { requireCronSecret } from "@/lib/webhook-auth.server";
 
 /**
  * Cron-invoked every hour. Texts a reminder + cancellation-policy warning
@@ -11,7 +12,9 @@ import { sendSms } from "@/lib/twilio.server";
 export const Route = createFileRoute("/api/public/hooks/reminders")({
   server: {
     handlers: {
-      POST: async () => {
+      POST: async ({ request }) => {
+        const unauthorized = requireCronSecret(request);
+        if (unauthorized) return unauthorized;
         const sb = createClient<Database>(
           process.env.SUPABASE_URL!,
           process.env.SUPABASE_SERVICE_ROLE_KEY!
