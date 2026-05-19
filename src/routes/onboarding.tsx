@@ -72,6 +72,7 @@ I have read this waiver in its entirety, fully understand its terms, and sign it
 
 function OnboardingPage() {
   const navigate = useNavigate();
+  const signWaiverFn = useServerFn(signWaiver);
   const [step, setStep] = useState(0);
   const [loading, setLoading] = useState(false);
 
