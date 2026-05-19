@@ -61,7 +61,7 @@ async function handleCheckoutCompleted(session: any) {
   // Save Stripe customer + default payment method on the profile so future
   // bookings can charge off-session (24h cancellation penalty).
   if (customerId) {
-    const profilePatch: Record<string, string> = { stripe_customer_id: customerId };
+    const profilePatch: { stripe_customer_id: string; default_payment_method_id?: string } = { stripe_customer_id: customerId };
     if (paymentIntentId) {
       try {
         const { createStripeClient } = await import("@/lib/stripe.server");
