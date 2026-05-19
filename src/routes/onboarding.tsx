@@ -389,8 +389,34 @@ function SignupStep(props: {
   email: string; setEmail: (v: string) => void;
   phone: string; setPhone: (v: string) => void;
   password: string; setPassword: (v: string) => void;
-  onNext: () => void; loading: boolean;
+  onNext: () => void; onSignIn: (email: string, password: string) => void; loading: boolean;
 }) {
+  const [mode, setMode] = useState<"signup" | "login">("signup");
+  const [loginEmail, setLoginEmail] = useState("");
+  const [loginPassword, setLoginPassword] = useState("");
+
+  if (mode === "login") {
+    return (
+      <div className="space-y-5">
+        <div>
+          <h2 className="text-xl font-bold">Welcome back</h2>
+          <p className="text-sm text-muted-foreground">Sign in to book your next lesson.</p>
+        </div>
+        <Field id="loginEmail" label="Email" type="email" value={loginEmail} onChange={setLoginEmail} placeholder="you@example.com" />
+        <Field id="loginPassword" label="Password" type="password" value={loginPassword} onChange={setLoginPassword} placeholder="Your password" />
+        <Button onClick={() => props.onSignIn(loginEmail, loginPassword)} disabled={props.loading} className="w-full" size="lg">
+          {props.loading ? "Signing in..." : "Log In"}
+        </Button>
+        <p className="text-center text-sm text-muted-foreground">
+          New here?{" "}
+          <button type="button" onClick={() => setMode("signup")} className="font-medium text-primary hover:underline">
+            Create an account
+          </button>
+        </p>
+      </div>
+    );
+  }
+
   return (
     <div className="space-y-5">
       <div>
@@ -404,6 +430,12 @@ function SignupStep(props: {
       <Button onClick={props.onNext} disabled={props.loading} className="w-full" size="lg">
         {props.loading ? "Creating account..." : "Continue"}
       </Button>
+      <p className="text-center text-sm text-muted-foreground">
+        Already have an account?{" "}
+        <button type="button" onClick={() => setMode("login")} className="font-medium text-primary hover:underline">
+          Sign in
+        </button>
+      </p>
     </div>
   );
 }
