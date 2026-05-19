@@ -383,6 +383,7 @@ function OnboardingPage() {
               students={students}
               selectedStudentId={selectedStudentId}
               setSelectedStudentId={setSelectedStudentId}
+              returningClient={returningClient}
               onBack={() => setStep(2)}
               onNext={handleConfirmLesson}
             />
