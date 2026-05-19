@@ -16,6 +16,7 @@ import { LessonCheckout } from "@/components/LessonCheckout";
 import { PaymentTestModeBanner } from "@/components/PaymentTestModeBanner";
 import { useServerFn } from "@tanstack/react-start";
 import { payWithSavedCard } from "@/lib/mock-client.functions";
+import { signWaiver } from "@/lib/waiver.functions";
 import { CreditCard } from "lucide-react";
 
 export const Route = createFileRoute("/onboarding")({
@@ -262,26 +263,14 @@ function OnboardingPage() {
       return;
     }
     setLoading(true);
-    const { data: { user } } = await supabase.auth.getUser();
-    if (!user) {
-      toast.error("Session expired");
+    try {
+      await signWaiverFn({ data: { signature: signature.trim().slice(0, 100) } });
+      setStep(3);
+    } catch (e) {
+      toast.error(e instanceof Error ? e.message : "Could not sign waiver");
+    } finally {
       setLoading(false);
-      return;
     }
-    const { error } = await supabase
-      .from("profiles")
-      .update({
-        waiver_signed: true,
-        waiver_signature: signature.trim().slice(0, 100),
-        waiver_signed_at: new Date().toISOString(),
-      })
-      .eq("id", user.id);
-    setLoading(false);
-    if (error) {
-      toast.error(error.message);
-      return;
-    }
-    setStep(3);
   }
 
   useEffect(() => {
