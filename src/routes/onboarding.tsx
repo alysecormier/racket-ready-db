@@ -12,6 +12,9 @@ import { z } from "zod";
 import { CheckCircle2, AlertTriangle, Plus, Trash2, CalendarDays, Users, DollarSign } from "lucide-react";
 import { LessonCheckout } from "@/components/LessonCheckout";
 import { PaymentTestModeBanner } from "@/components/PaymentTestModeBanner";
+import { useServerFn } from "@tanstack/react-start";
+import { payWithSavedCard } from "@/lib/mock-client.functions";
+import { CreditCard } from "lucide-react";
 
 export const Route = createFileRoute("/onboarding")({
   head: () => ({
