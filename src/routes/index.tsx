@@ -1,12 +1,12 @@
 import { createFileRoute, Link } from "@tanstack/react-router";
 import { Button } from "@/components/ui/button";
-import { CheckCircle2 } from "lucide-react";
+import heroImage from "@/assets/tennis-hero.jpg";
 
 export const Route = createFileRoute("/")({
   head: () => ({
     meta: [
-      { title: "Ace Tennis Academy — Coaching for every level" },
-      { name: "description", content: "Private and group tennis lessons. Sign up in minutes." },
+      { title: "Summer 2026 Tennis Lessons — Alyse's Tennis Camp" },
+      { name: "description", content: "Sign up for Summer 2026 tennis lessons and camps." },
     ],
   }),
   component: Index,
@@ -14,31 +14,46 @@ export const Route = createFileRoute("/")({
 
 function Index() {
   return (
-    <main className="min-h-screen bg-gradient-to-br from-background via-secondary/40 to-background">
-      <div className="mx-auto flex min-h-screen max-w-3xl flex-col items-center justify-center px-5 py-16 text-center">
-        <div className="mb-5 inline-flex h-14 w-14 items-center justify-center rounded-full bg-primary text-3xl shadow-lg">🎾</div>
-        <h1 className="text-3xl font-bold tracking-tight sm:text-5xl">
-          Ace Tennis Academy
-        </h1>
-        <p className="mt-4 max-w-xl text-base text-muted-foreground sm:text-lg">
-          Pro-level coaching for kids and adults. Book your first lesson in under
-          two minutes.
-        </p>
-        <ul className="mt-6 grid gap-2 text-left text-sm sm:grid-cols-3 sm:gap-4">
-          {["Certified coaches", "Group & private", "All skill levels"].map((f) => (
-            <li key={f} className="flex items-center gap-2 rounded-md bg-background/60 px-3 py-2">
-              <CheckCircle2 className="h-4 w-4 text-primary" /> {f}
-            </li>
-          ))}
-        </ul>
-        <Link to="/onboarding" className="mt-8 w-full sm:w-auto">
-          <Button size="lg" className="w-full sm:w-auto px-8">Get Started</Button>
-        </Link>
-        <div className="mt-4 flex gap-4 text-sm text-muted-foreground">
-          <Link to="/login" className="hover:text-foreground hover:underline">Sign in</Link>
-          <span>·</span>
-          <Link to="/admin" className="hover:text-foreground hover:underline">Coach dashboard</Link>
-        </div>
+    <main className="relative min-h-screen overflow-hidden bg-background">
+      <img
+        src={heroImage}
+        alt="Cartoon tennis ball mascot playing on a tennis court"
+        width={1920}
+        height={1080}
+        className="absolute inset-0 h-full w-full object-cover"
+      />
+      <div className="absolute inset-0 bg-gradient-to-br from-background/85 via-background/40 to-transparent" />
+
+      <div className="relative z-10 mx-auto flex min-h-screen max-w-6xl flex-col justify-between px-6 py-10 sm:px-10 sm:py-16">
+        <header className="flex items-center gap-2 text-sm font-semibold tracking-wide text-foreground/80">
+          <span className="text-xl">🎾</span> Alyse's Tennis Camp
+        </header>
+
+        <section className="max-w-3xl">
+          <h1 className="text-5xl font-black leading-[0.95] tracking-tight text-foreground sm:text-7xl lg:text-8xl">
+            Welcome to <span className="block">Summer 2026</span>
+            <span className="block">Tennis Lessons</span>
+          </h1>
+
+          <div className="mt-10 flex flex-col gap-3 sm:flex-row">
+            <Link to="/onboarding">
+              <Button size="lg" className="w-full px-10 py-6 text-base sm:w-auto">
+                Client Portal
+              </Button>
+            </Link>
+            <Link to="/login">
+              <Button
+                size="lg"
+                variant="outline"
+                className="w-full bg-background/80 px-10 py-6 text-base backdrop-blur-sm sm:w-auto"
+              >
+                Coach Portal
+              </Button>
+            </Link>
+          </div>
+        </section>
+
+        <footer className="text-xs text-foreground/60" />
       </div>
     </main>
   );
