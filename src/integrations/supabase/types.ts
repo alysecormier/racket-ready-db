@@ -152,6 +152,8 @@ export type Database = {
           id: string
           phone: string | null
           role: Database["public"]["Enums"]["user_role"]
+          saved_card_last4: string | null
+          stripe_customer_id: string | null
           updated_at: string
           waiver_signature: string | null
           waiver_signed: boolean
@@ -164,6 +166,8 @@ export type Database = {
           id: string
           phone?: string | null
           role?: Database["public"]["Enums"]["user_role"]
+          saved_card_last4?: string | null
+          stripe_customer_id?: string | null
           updated_at?: string
           waiver_signature?: string | null
           waiver_signed?: boolean
@@ -176,6 +180,8 @@ export type Database = {
           id?: string
           phone?: string | null
           role?: Database["public"]["Enums"]["user_role"]
+          saved_card_last4?: string | null
+          stripe_customer_id?: string | null
           updated_at?: string
           waiver_signature?: string | null
           waiver_signed?: boolean

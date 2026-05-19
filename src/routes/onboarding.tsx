@@ -12,6 +12,9 @@ import { z } from "zod";
 import { CheckCircle2, AlertTriangle, Plus, Trash2, CalendarDays, Users, DollarSign } from "lucide-react";
 import { LessonCheckout } from "@/components/LessonCheckout";
 import { PaymentTestModeBanner } from "@/components/PaymentTestModeBanner";
+import { useServerFn } from "@tanstack/react-start";
+import { payWithSavedCard } from "@/lib/mock-client.functions";
+import { CreditCard } from "lucide-react";
 
 export const Route = createFileRoute("/onboarding")({
   head: () => ({
@@ -90,6 +93,42 @@ function OnboardingPage() {
   const [selectedLessonId, setSelectedLessonId] = useState<string | null>(null);
   const [selectedStudentId, setSelectedStudentId] = useState<string | null>(null);
 
+  // saved card on file (mock)
+  const [savedCardLast4, setSavedCardLast4] = useState<string | null>(null);
+
+  // On mount: if already signed in & waiver complete, jump to lesson select
+  useEffect(() => {
+    let cancelled = false;
+    (async () => {
+      const { data: { user } } = await supabase.auth.getUser();
+      if (!user || cancelled) return;
+      const [{ data: profile }, { data: studentRows }] = await Promise.all([
+        supabase
+          .from("profiles")
+          .select("waiver_signed, full_name, phone, email, saved_card_last4, stripe_customer_id")
+          .eq("id", user.id)
+          .maybeSingle(),
+        supabase.from("students").select("id, name").eq("parent_id", user.id),
+      ]);
+      if (cancelled) return;
+      if (profile) {
+        setFullName(profile.full_name ?? "");
+        setPhone(profile.phone ?? "");
+        setEmail(profile.email ?? user.email ?? "");
+        if (profile.saved_card_last4 && profile.stripe_customer_id) {
+          setSavedCardLast4(profile.saved_card_last4);
+        }
+      }
+      if (studentRows && studentRows.length > 0) {
+        setStudents(studentRows);
+        setSelectedStudentId(studentRows[0].id);
+        setRegisteringChild(true);
+      }
+      if (profile?.waiver_signed) setStep(3);
+    })();
+    return () => { cancelled = true; };
+  }, []);
+
   const updateChild = (i: number, patch: Partial<Child>) =>
     setChildren((arr) => arr.map((c, idx) => (idx === i ? { ...c, ...patch } : c)));
   const addChild = () => setChildren((a) => [...a, { name: "", age: "", gender: "" }]);
@@ -146,7 +185,7 @@ function OnboardingPage() {
     }
     const userId = authData.user.id;
     const [{ data: profile }, { data: studentRows }] = await Promise.all([
-      supabase.from("profiles").select("waiver_signed, full_name, phone, email").eq("id", userId).maybeSingle(),
+      supabase.from("profiles").select("waiver_signed, full_name, phone, email, saved_card_last4, stripe_customer_id").eq("id", userId).maybeSingle(),
       supabase.from("students").select("id, name").eq("parent_id", userId),
     ]);
     setLoading(false);
@@ -154,6 +193,9 @@ function OnboardingPage() {
       setFullName(profile.full_name ?? "");
       setPhone(profile.phone ?? "");
       setEmail(profile.email ?? loginEmail.trim());
+      if (profile.saved_card_last4 && profile.stripe_customer_id) {
+        setSavedCardLast4(profile.saved_card_last4);
+      }
     }
     if (studentRows && studentRows.length > 0) {
       setStudents(studentRows);
@@ -345,6 +387,7 @@ function OnboardingPage() {
             <PaymentStep
               lesson={selectedLesson}
               studentId={selectedStudentId}
+              savedCardLast4={savedCardLast4}
               onBack={() => setStep(3)}
               onCancel={() => navigate({ to: "/" })}
             />
@@ -639,10 +682,29 @@ function LessonStep(props: {
 function PaymentStep(props: {
   lesson: Lesson;
   studentId: string | null;
+  savedCardLast4: string | null;
   onBack: () => void;
   onCancel: () => void;
 }) {
   const date = new Date(props.lesson.start_time);
+  const navigate = useNavigate();
+  const payNow = useServerFn(payWithSavedCard);
+  const [paying, setPaying] = useState(false);
+  const [paid, setPaid] = useState(false);
+
+  async function handleSavedCardPay() {
+    setPaying(true);
+    try {
+      await payNow({ data: { lessonId: props.lesson.id, studentId: props.studentId } });
+      setPaid(true);
+      toast.success(`Charged card ending in ${props.savedCardLast4}`);
+    } catch (e) {
+      toast.error(e instanceof Error ? e.message : "Payment failed");
+    } finally {
+      setPaying(false);
+    }
+  }
+
   return (
     <div className="space-y-5">
       <div>
@@ -674,16 +736,42 @@ function PaymentStep(props: {
         </div>
       </div>
 
-      <div className="rounded-lg border border-border bg-background overflow-hidden">
-        <LessonCheckout
-          lessonId={props.lesson.id}
-          studentId={props.studentId}
-        />
-      </div>
+      {paid ? (
+        <div className="rounded-lg border border-primary/40 bg-primary/5 p-6 text-center">
+          <CheckCircle2 className="mx-auto h-10 w-10 text-primary" />
+          <div className="mt-3 text-lg font-bold">Booking confirmed!</div>
+          <p className="mt-1 text-sm text-muted-foreground">You're all set. See you on the court.</p>
+          <Button onClick={() => navigate({ to: "/" })} className="mt-4">Done</Button>
+        </div>
+      ) : props.savedCardLast4 ? (
+        <div className="rounded-lg border border-border bg-background p-5">
+          <div className="flex items-center gap-3">
+            <div className="flex h-10 w-10 items-center justify-center rounded-md bg-primary/10 text-primary">
+              <CreditCard className="h-5 w-5" />
+            </div>
+            <div className="flex-1">
+              <div className="text-sm font-semibold">Pay with saved card ending in {props.savedCardLast4}</div>
+              <div className="text-xs text-muted-foreground">Card on file from your last visit</div>
+            </div>
+          </div>
+          <Button onClick={handleSavedCardPay} disabled={paying} className="mt-4 w-full" size="lg">
+            {paying ? "Processing..." : `Pay Now — $${props.lesson.price.toFixed(2)}`}
+          </Button>
+        </div>
+      ) : (
+        <div className="rounded-lg border border-border bg-background overflow-hidden">
+          <LessonCheckout
+            lessonId={props.lesson.id}
+            studentId={props.studentId}
+          />
+        </div>
+      )}
 
-      <Button onClick={props.onBack} variant="ghost" className="w-full">
-        ← Choose a different lesson
-      </Button>
+      {!paid && (
+        <Button onClick={props.onBack} variant="ghost" className="w-full">
+          ← Choose a different lesson
+        </Button>
+      )}
     </div>
   );
 }
