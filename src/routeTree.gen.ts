@@ -15,6 +15,9 @@ import { Route as AdminRouteImport } from './routes/admin'
 import { Route as IndexRouteImport } from './routes/index'
 import { Route as CheckoutReturnRouteImport } from './routes/checkout.return'
 import { Route as ApiPublicPaymentsWebhookRouteImport } from './routes/api/public/payments/webhook'
+import { Route as ApiPublicHooksSmsInboundRouteImport } from './routes/api/public/hooks/sms-inbound'
+import { Route as ApiPublicHooksRemindersRouteImport } from './routes/api/public/hooks/reminders'
+import { Route as ApiPublicHooksExpireOffersRouteImport } from './routes/api/public/hooks/expire-offers'
 
 const OnboardingRoute = OnboardingRouteImport.update({
   id: '/onboarding',
@@ -47,6 +50,23 @@ const ApiPublicPaymentsWebhookRoute =
     path: '/api/public/payments/webhook',
     getParentRoute: () => rootRouteImport,
   } as any)
+const ApiPublicHooksSmsInboundRoute =
+  ApiPublicHooksSmsInboundRouteImport.update({
+    id: '/api/public/hooks/sms-inbound',
+    path: '/api/public/hooks/sms-inbound',
+    getParentRoute: () => rootRouteImport,
+  } as any)
+const ApiPublicHooksRemindersRoute = ApiPublicHooksRemindersRouteImport.update({
+  id: '/api/public/hooks/reminders',
+  path: '/api/public/hooks/reminders',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const ApiPublicHooksExpireOffersRoute =
+  ApiPublicHooksExpireOffersRouteImport.update({
+    id: '/api/public/hooks/expire-offers',
+    path: '/api/public/hooks/expire-offers',
+    getParentRoute: () => rootRouteImport,
+  } as any)
 
 export interface FileRoutesByFullPath {
   '/': typeof IndexRoute
@@ -54,6 +74,9 @@ export interface FileRoutesByFullPath {
   '/login': typeof LoginRoute
   '/onboarding': typeof OnboardingRoute
   '/checkout/return': typeof CheckoutReturnRoute
+  '/api/public/hooks/expire-offers': typeof ApiPublicHooksExpireOffersRoute
+  '/api/public/hooks/reminders': typeof ApiPublicHooksRemindersRoute
+  '/api/public/hooks/sms-inbound': typeof ApiPublicHooksSmsInboundRoute
   '/api/public/payments/webhook': typeof ApiPublicPaymentsWebhookRoute
 }
 export interface FileRoutesByTo {
@@ -62,6 +85,9 @@ export interface FileRoutesByTo {
   '/login': typeof LoginRoute
   '/onboarding': typeof OnboardingRoute
   '/checkout/return': typeof CheckoutReturnRoute
+  '/api/public/hooks/expire-offers': typeof ApiPublicHooksExpireOffersRoute
+  '/api/public/hooks/reminders': typeof ApiPublicHooksRemindersRoute
+  '/api/public/hooks/sms-inbound': typeof ApiPublicHooksSmsInboundRoute
   '/api/public/payments/webhook': typeof ApiPublicPaymentsWebhookRoute
 }
 export interface FileRoutesById {
@@ -71,6 +97,9 @@ export interface FileRoutesById {
   '/login': typeof LoginRoute
   '/onboarding': typeof OnboardingRoute
   '/checkout/return': typeof CheckoutReturnRoute
+  '/api/public/hooks/expire-offers': typeof ApiPublicHooksExpireOffersRoute
+  '/api/public/hooks/reminders': typeof ApiPublicHooksRemindersRoute
+  '/api/public/hooks/sms-inbound': typeof ApiPublicHooksSmsInboundRoute
   '/api/public/payments/webhook': typeof ApiPublicPaymentsWebhookRoute
 }
 export interface FileRouteTypes {
@@ -81,6 +110,9 @@ export interface FileRouteTypes {
     | '/login'
     | '/onboarding'
     | '/checkout/return'
+    | '/api/public/hooks/expire-offers'
+    | '/api/public/hooks/reminders'
+    | '/api/public/hooks/sms-inbound'
     | '/api/public/payments/webhook'
   fileRoutesByTo: FileRoutesByTo
   to:
@@ -89,6 +121,9 @@ export interface FileRouteTypes {
     | '/login'
     | '/onboarding'
     | '/checkout/return'
+    | '/api/public/hooks/expire-offers'
+    | '/api/public/hooks/reminders'
+    | '/api/public/hooks/sms-inbound'
     | '/api/public/payments/webhook'
   id:
     | '__root__'
@@ -97,6 +132,9 @@ export interface FileRouteTypes {
     | '/login'
     | '/onboarding'
     | '/checkout/return'
+    | '/api/public/hooks/expire-offers'
+    | '/api/public/hooks/reminders'
+    | '/api/public/hooks/sms-inbound'
     | '/api/public/payments/webhook'
   fileRoutesById: FileRoutesById
 }
@@ -106,6 +144,9 @@ export interface RootRouteChildren {
   LoginRoute: typeof LoginRoute
   OnboardingRoute: typeof OnboardingRoute
   CheckoutReturnRoute: typeof CheckoutReturnRoute
+  ApiPublicHooksExpireOffersRoute: typeof ApiPublicHooksExpireOffersRoute
+  ApiPublicHooksRemindersRoute: typeof ApiPublicHooksRemindersRoute
+  ApiPublicHooksSmsInboundRoute: typeof ApiPublicHooksSmsInboundRoute
   ApiPublicPaymentsWebhookRoute: typeof ApiPublicPaymentsWebhookRoute
 }
 
@@ -153,6 +194,27 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof ApiPublicPaymentsWebhookRouteImport
       parentRoute: typeof rootRouteImport
     }
+    '/api/public/hooks/sms-inbound': {
+      id: '/api/public/hooks/sms-inbound'
+      path: '/api/public/hooks/sms-inbound'
+      fullPath: '/api/public/hooks/sms-inbound'
+      preLoaderRoute: typeof ApiPublicHooksSmsInboundRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/api/public/hooks/reminders': {
+      id: '/api/public/hooks/reminders'
+      path: '/api/public/hooks/reminders'
+      fullPath: '/api/public/hooks/reminders'
+      preLoaderRoute: typeof ApiPublicHooksRemindersRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/api/public/hooks/expire-offers': {
+      id: '/api/public/hooks/expire-offers'
+      path: '/api/public/hooks/expire-offers'
+      fullPath: '/api/public/hooks/expire-offers'
+      preLoaderRoute: typeof ApiPublicHooksExpireOffersRouteImport
+      parentRoute: typeof rootRouteImport
+    }
   }
 }
 
@@ -162,8 +224,21 @@ const rootRouteChildren: RootRouteChildren = {
   LoginRoute: LoginRoute,
   OnboardingRoute: OnboardingRoute,
   CheckoutReturnRoute: CheckoutReturnRoute,
+  ApiPublicHooksExpireOffersRoute: ApiPublicHooksExpireOffersRoute,
+  ApiPublicHooksRemindersRoute: ApiPublicHooksRemindersRoute,
+  ApiPublicHooksSmsInboundRoute: ApiPublicHooksSmsInboundRoute,
   ApiPublicPaymentsWebhookRoute: ApiPublicPaymentsWebhookRoute,
 }
 export const routeTree = rootRouteImport
   ._addFileChildren(rootRouteChildren)
   ._addFileTypes<FileRouteTypes>()
+
+import type { getRouter } from './router.tsx'
+import type { startInstance } from './start.ts'
+declare module '@tanstack/react-start' {
+  interface Register {
+    ssr: true
+    router: Awaited<ReturnType<typeof getRouter>>
+    config: Awaited<ReturnType<typeof startInstance.getOptions>>
+  }
+}
