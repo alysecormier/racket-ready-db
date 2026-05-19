@@ -387,6 +387,7 @@ function OnboardingPage() {
             <PaymentStep
               lesson={selectedLesson}
               studentId={selectedStudentId}
+              savedCardLast4={savedCardLast4}
               onBack={() => setStep(3)}
               onCancel={() => navigate({ to: "/" })}
             />
