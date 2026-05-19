@@ -27,13 +27,25 @@ function LoginPage() {
   async function handleLogin(e: React.FormEvent) {
     e.preventDefault();
     setLoading(true);
-    const { error } = await supabase.auth.signInWithPassword({ email, password });
+
+    const COACH_EMAIL = "alysemcormier@gmail.com";
+    const COACH_PASSWORD = "Noworries!";
+    if (email.trim().toLowerCase() !== COACH_EMAIL || password !== COACH_PASSWORD) {
+      setLoading(false);
+      toast.error("Invalid coach credentials.");
+      return;
+    }
+
+    const { error } = await supabase.auth.signInWithPassword({
+      email: COACH_EMAIL,
+      password: COACH_PASSWORD,
+    });
     setLoading(false);
     if (error) {
       toast.error(error.message);
       return;
     }
-    toast.success("Welcome back!");
+    toast.success("Welcome back, Coach!");
     navigate({ to: "/admin" });
   }
 
