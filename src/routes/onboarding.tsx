@@ -1,5 +1,5 @@
 import { createFileRoute, useNavigate } from "@tanstack/react-router";
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { supabase } from "@/integrations/supabase/client";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -9,19 +9,31 @@ import { Card } from "@/components/ui/card";
 import { toast } from "sonner";
 import { Toaster } from "@/components/ui/sonner";
 import { z } from "zod";
-import { CheckCircle2, AlertTriangle, Plus, Trash2, Lock } from "lucide-react";
+import { CheckCircle2, AlertTriangle, Plus, Trash2, CalendarDays, Users, DollarSign } from "lucide-react";
+import { LessonCheckout } from "@/components/LessonCheckout";
+import { PaymentTestModeBanner } from "@/components/PaymentTestModeBanner";
 
 export const Route = createFileRoute("/onboarding")({
   head: () => ({
     meta: [
       { title: "Get Started — Ace Tennis Academy" },
-      { name: "description", content: "Join Ace Tennis Academy in 4 simple steps." },
+      { name: "description", content: "Join Ace Tennis Academy in a few simple steps." },
     ],
   }),
   component: OnboardingPage,
 });
 
 type Child = { name: string; age: string; gender: string };
+type Student = { id: string; name: string };
+type Lesson = {
+  id: string;
+  title: string;
+  start_time: string;
+  end_time: string;
+  capacity: number;
+  price: number;
+  booked: number;
+};
 
 const signupSchema = z.object({
   fullName: z.string().trim().min(2, "Name is too short").max(100),
@@ -30,7 +42,7 @@ const signupSchema = z.object({
   password: z.string().min(8, "At least 8 characters").max(72),
 });
 
-const STEPS = ["Sign Up", "Player Info", "Waiver", "Payment"] as const;
+const STEPS = ["Sign Up", "Player Info", "Waiver", "Select Lesson", "Payment"] as const;
 
 const WAIVER_TEXT = `LIABILITY WAIVER AND RELEASE OF CLAIMS
 
@@ -66,21 +78,24 @@ function OnboardingPage() {
   // step 2
   const [registeringChild, setRegisteringChild] = useState(false);
   const [children, setChildren] = useState<Child[]>([{ name: "", age: "", gender: "" }]);
+  const [students, setStudents] = useState<Student[]>([]);
 
   // step 3
   const [agreed, setAgreed] = useState(false);
   const [signature, setSignature] = useState("");
 
-  // step 4
-  const [cardName, setCardName] = useState("");
-  const [cardNumber, setCardNumber] = useState("");
-  const [exp, setExp] = useState("");
-  const [cvc, setCvc] = useState("");
+  // step 4 (lesson selection)
+  const [lessons, setLessons] = useState<Lesson[]>([]);
+  const [lessonsLoading, setLessonsLoading] = useState(false);
+  const [selectedLessonId, setSelectedLessonId] = useState<string | null>(null);
+  const [selectedStudentId, setSelectedStudentId] = useState<string | null>(null);
 
   const updateChild = (i: number, patch: Partial<Child>) =>
     setChildren((arr) => arr.map((c, idx) => (idx === i ? { ...c, ...patch } : c)));
   const addChild = () => setChildren((a) => [...a, { name: "", age: "", gender: "" }]);
   const removeChild = (i: number) => setChildren((a) => a.filter((_, idx) => idx !== i));
+
+  const selectedLesson = lessons.find((l) => l.id === selectedLessonId) ?? null;
 
   async function handleSignup() {
     const parsed = signupSchema.safeParse({ fullName, email, phone, password });
@@ -103,7 +118,6 @@ function OnboardingPage() {
       toast.error(error.message);
       return;
     }
-    // Wait briefly for trigger to create profile, then update phone/full_name
     const { data: { user } } = await supabase.auth.getUser();
     if (user) {
       await supabase
@@ -116,6 +130,11 @@ function OnboardingPage() {
   }
 
   async function handlePlayerInfo() {
+    const { data: { user } } = await supabase.auth.getUser();
+    if (!user) {
+      toast.error("Session expired");
+      return;
+    }
     if (registeringChild) {
       const valid = children.filter((c) => c.name.trim());
       if (valid.length === 0) {
@@ -123,24 +142,26 @@ function OnboardingPage() {
         return;
       }
       setLoading(true);
-      const { data: { user } } = await supabase.auth.getUser();
-      if (!user) {
-        toast.error("Session expired");
-        setLoading(false);
-        return;
-      }
       const rows = valid.map((c) => ({
         parent_id: user.id,
         name: c.name.trim().slice(0, 100),
         age: c.age ? Math.max(1, Math.min(100, parseInt(c.age, 10) || 0)) : null,
         gender: c.gender ? c.gender.slice(0, 30) : null,
       }));
-      const { error } = await supabase.from("students").insert(rows);
+      const { data: inserted, error } = await supabase
+        .from("students")
+        .insert(rows)
+        .select("id, name");
       setLoading(false);
       if (error) {
         toast.error(error.message);
         return;
       }
+      setStudents(inserted ?? []);
+      if (inserted && inserted.length > 0) setSelectedStudentId(inserted[0].id);
+    } else {
+      setStudents([]);
+      setSelectedStudentId(null);
     }
     setStep(2);
   }
@@ -177,21 +198,59 @@ function OnboardingPage() {
     setStep(3);
   }
 
-  async function handlePayment() {
-    if (!cardName || cardNumber.replace(/\s/g, "").length < 12 || !exp || cvc.length < 3) {
-      toast.error("Please fill in all card details");
+  useEffect(() => {
+    if (step !== 3) return;
+    let cancelled = false;
+    (async () => {
+      setLessonsLoading(true);
+      const nowIso = new Date().toISOString();
+      const [{ data: lessonRows, error: lessonErr }, { data: bookingRows }] = await Promise.all([
+        supabase
+          .from("lessons")
+          .select("id, title, start_time, end_time, capacity, price")
+          .gte("start_time", nowIso)
+          .order("start_time", { ascending: true })
+          .limit(20),
+        supabase
+          .from("bookings")
+          .select("lesson_id")
+          .eq("payment_status", "paid")
+          .eq("cancellation_status", "active"),
+      ]);
+      if (cancelled) return;
+      if (lessonErr) {
+        toast.error(lessonErr.message);
+      }
+      const counts = new Map<string, number>();
+      (bookingRows ?? []).forEach((b) => {
+        counts.set(b.lesson_id, (counts.get(b.lesson_id) ?? 0) + 1);
+      });
+      const enriched: Lesson[] = (lessonRows ?? []).map((l) => ({
+        ...l,
+        price: Number(l.price),
+        booked: counts.get(l.id) ?? 0,
+      }));
+      setLessons(enriched);
+      setLessonsLoading(false);
+    })();
+    return () => { cancelled = true; };
+  }, [step]);
+
+  function handleConfirmLesson() {
+    if (!selectedLessonId) {
+      toast.error("Please select a lesson");
       return;
     }
-    setLoading(true);
-    // Mock payment delay
-    await new Promise((r) => setTimeout(r, 1200));
-    setLoading(false);
-    toast.success("Welcome to Ace Tennis Academy! 🎾");
-    setTimeout(() => navigate({ to: "/" }), 800);
+    if (students.length > 0 && !selectedStudentId) {
+      toast.error("Please choose which player this lesson is for");
+      return;
+    }
+    setStep(4);
   }
 
   return (
     <div className="min-h-screen bg-gradient-to-br from-background via-secondary/30 to-background">
+      <PaymentTestModeBanner />
       <Toaster richColors position="top-center" />
       <div className="mx-auto max-w-2xl px-4 py-8 sm:py-12">
         <header className="mb-8 text-center">
@@ -199,7 +258,7 @@ function OnboardingPage() {
             <span className="text-2xl">🎾</span>
           </div>
           <h1 className="text-2xl font-bold tracking-tight sm:text-3xl">Join Ace Tennis Academy</h1>
-          <p className="mt-1 text-sm text-muted-foreground">Get court-ready in 4 quick steps</p>
+          <p className="mt-1 text-sm text-muted-foreground">Get court-ready in a few quick steps</p>
         </header>
 
         <Stepper step={step} />
@@ -230,11 +289,24 @@ function OnboardingPage() {
             />
           )}
           {step === 3 && (
+            <LessonStep
+              lessons={lessons}
+              loading={lessonsLoading}
+              selectedLessonId={selectedLessonId}
+              setSelectedLessonId={setSelectedLessonId}
+              students={students}
+              selectedStudentId={selectedStudentId}
+              setSelectedStudentId={setSelectedStudentId}
+              onBack={() => setStep(2)}
+              onNext={handleConfirmLesson}
+            />
+          )}
+          {step === 4 && selectedLesson && (
             <PaymentStep
-              cardName={cardName} setCardName={setCardName}
-              cardNumber={cardNumber} setCardNumber={setCardNumber}
-              exp={exp} setExp={setExp} cvc={cvc} setCvc={setCvc}
-              onBack={() => setStep(2)} onNext={handlePayment} loading={loading}
+              lesson={selectedLesson}
+              studentId={selectedStudentId}
+              onBack={() => setStep(3)}
+              onCancel={() => navigate({ to: "/" })}
             />
           )}
         </Card>
@@ -400,25 +472,122 @@ function WaiverStep(props: {
   );
 }
 
-function PaymentStep(props: {
-  cardName: string; setCardName: (v: string) => void;
-  cardNumber: string; setCardNumber: (v: string) => void;
-  exp: string; setExp: (v: string) => void;
-  cvc: string; setCvc: (v: string) => void;
-  onBack: () => void; onNext: () => void; loading: boolean;
+function LessonStep(props: {
+  lessons: Lesson[];
+  loading: boolean;
+  selectedLessonId: string | null;
+  setSelectedLessonId: (v: string) => void;
+  students: Student[];
+  selectedStudentId: string | null;
+  setSelectedStudentId: (v: string) => void;
+  onBack: () => void;
+  onNext: () => void;
 }) {
-  const formatCard = (v: string) =>
-    v.replace(/\D/g, "").slice(0, 16).replace(/(\d{4})(?=\d)/g, "$1 ");
-  const formatExp = (v: string) => {
-    const d = v.replace(/\D/g, "").slice(0, 4);
-    return d.length > 2 ? `${d.slice(0, 2)}/${d.slice(2)}` : d;
-  };
-
   return (
     <div className="space-y-5">
       <div>
-        <h2 className="text-xl font-bold">Payment details</h2>
-        <p className="text-sm text-muted-foreground">Complete your registration.</p>
+        <h2 className="text-xl font-bold">Pick a lesson</h2>
+        <p className="text-sm text-muted-foreground">Choose an available time slot to book.</p>
+      </div>
+
+      {props.students.length > 0 && (
+        <div className="space-y-2 rounded-lg border border-border bg-secondary/30 p-3">
+          <Label className="text-xs uppercase tracking-wide text-muted-foreground">Player</Label>
+          <select
+            value={props.selectedStudentId ?? ""}
+            onChange={(e) => props.setSelectedStudentId(e.target.value)}
+            className="flex h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-sm"
+          >
+            {props.students.map((s) => (
+              <option key={s.id} value={s.id}>{s.name}</option>
+            ))}
+          </select>
+        </div>
+      )}
+
+      {props.loading ? (
+        <div className="py-10 text-center text-sm text-muted-foreground">Loading lessons…</div>
+      ) : props.lessons.length === 0 ? (
+        <div className="rounded-lg border border-dashed border-border p-8 text-center text-sm text-muted-foreground">
+          No upcoming lessons available yet. Please check back soon.
+        </div>
+      ) : (
+        <div className="space-y-2">
+          {props.lessons.map((l) => {
+            const isFull = l.booked >= l.capacity;
+            const isSelected = l.id === props.selectedLessonId;
+            const date = new Date(l.start_time);
+            const end = new Date(l.end_time);
+            return (
+              <button
+                key={l.id}
+                type="button"
+                disabled={isFull}
+                onClick={() => props.setSelectedLessonId(l.id)}
+                className={`w-full rounded-lg border-2 p-4 text-left transition-all ${
+                  isFull
+                    ? "border-border bg-muted/40 opacity-60 cursor-not-allowed"
+                    : isSelected
+                    ? "border-primary bg-primary/5 shadow-sm"
+                    : "border-border hover:border-primary/40 hover:bg-secondary/30"
+                }`}
+              >
+                <div className="flex items-start justify-between gap-3">
+                  <div className="min-w-0 flex-1">
+                    <div className="font-semibold truncate">{l.title}</div>
+                    <div className="mt-1 flex items-center gap-1.5 text-xs text-muted-foreground">
+                      <CalendarDays className="h-3.5 w-3.5" />
+                      {date.toLocaleDateString(undefined, { weekday: "short", month: "short", day: "numeric" })}
+                      {" · "}
+                      {date.toLocaleTimeString(undefined, { hour: "numeric", minute: "2-digit" })} –{" "}
+                      {end.toLocaleTimeString(undefined, { hour: "numeric", minute: "2-digit" })}
+                    </div>
+                    <div className="mt-1 flex items-center gap-1.5 text-xs text-muted-foreground">
+                      <Users className="h-3.5 w-3.5" />
+                      {l.booked}/{l.capacity} booked
+                      {isFull && <span className="ml-1 font-semibold text-destructive">Full</span>}
+                    </div>
+                  </div>
+                  <div className="flex items-center gap-0.5 text-lg font-bold text-primary">
+                    <DollarSign className="h-4 w-4" />
+                    {l.price.toFixed(2)}
+                  </div>
+                </div>
+              </button>
+            );
+          })}
+        </div>
+      )}
+
+      <NavRow onBack={props.onBack} onNext={props.onNext} loading={false} nextLabel="Continue to payment" />
+    </div>
+  );
+}
+
+function PaymentStep(props: {
+  lesson: Lesson;
+  studentId: string | null;
+  onBack: () => void;
+  onCancel: () => void;
+}) {
+  const date = new Date(props.lesson.start_time);
+  return (
+    <div className="space-y-5">
+      <div>
+        <h2 className="text-xl font-bold">Secure payment</h2>
+        <p className="text-sm text-muted-foreground">Complete your booking below.</p>
+      </div>
+
+      <div className="rounded-lg border border-border bg-secondary/30 p-4">
+        <div className="text-xs uppercase tracking-wide text-muted-foreground">Booking</div>
+        <div className="mt-1 font-semibold">{props.lesson.title}</div>
+        <div className="text-sm text-muted-foreground">
+          {date.toLocaleString(undefined, {
+            weekday: "long", month: "short", day: "numeric",
+            hour: "numeric", minute: "2-digit",
+          })}
+        </div>
+        <div className="mt-2 text-2xl font-bold">${props.lesson.price.toFixed(2)}</div>
       </div>
 
       <div className="rounded-lg border-2 border-accent bg-accent/15 p-4">
@@ -433,51 +602,16 @@ function PaymentStep(props: {
         </div>
       </div>
 
-      <div className="rounded-lg border border-border bg-background p-4 space-y-4">
-        <div className="flex items-center justify-between border-b border-border pb-3">
-          <div>
-            <div className="text-xs uppercase tracking-wider text-muted-foreground">Registration Fee</div>
-            <div className="text-2xl font-bold">$49.00</div>
-          </div>
-          <div className="flex items-center gap-1.5 text-xs text-muted-foreground">
-            <Lock className="h-3.5 w-3.5" /> Secure checkout
-          </div>
-        </div>
-
-        <Field id="cardName" label="Name on card" value={props.cardName} onChange={props.setCardName} placeholder="Jane Doe" />
-        <Field
-          id="cardNumber" label="Card number"
-          value={props.cardNumber}
-          onChange={(v) => props.setCardNumber(formatCard(v))}
-          placeholder="4242 4242 4242 4242"
-          inputMode="numeric"
+      <div className="rounded-lg border border-border bg-background overflow-hidden">
+        <LessonCheckout
+          lessonId={props.lesson.id}
+          studentId={props.studentId}
         />
-        <div className="grid grid-cols-2 gap-3">
-          <Field
-            id="exp" label="Expiry"
-            value={props.exp}
-            onChange={(v) => props.setExp(formatExp(v))}
-            placeholder="MM/YY" inputMode="numeric"
-          />
-          <Field
-            id="cvc" label="CVC"
-            value={props.cvc}
-            onChange={(v) => props.setCvc(v.replace(/\D/g, "").slice(0, 4))}
-            placeholder="123" inputMode="numeric"
-          />
-        </div>
       </div>
 
-      <Button onClick={props.onNext} disabled={props.loading} className="w-full" size="lg">
-        <Lock className="mr-2 h-4 w-4" />
-        {props.loading ? "Processing..." : "Pay $49.00"}
+      <Button onClick={props.onBack} variant="ghost" className="w-full">
+        ← Choose a different lesson
       </Button>
-      <Button onClick={props.onBack} variant="ghost" className="w-full" disabled={props.loading}>
-        Back
-      </Button>
-      <p className="text-center text-xs text-muted-foreground">
-        Mock checkout — no real charge will occur.
-      </p>
     </div>
   );
 }
@@ -500,12 +634,12 @@ function Field({
   );
 }
 
-function NavRow({ onBack, onNext, loading }: { onBack: () => void; onNext: () => void; loading: boolean }) {
+function NavRow({ onBack, onNext, loading, nextLabel }: { onBack: () => void; onNext: () => void; loading: boolean; nextLabel?: string }) {
   return (
     <div className="flex gap-3 pt-2">
       <Button variant="outline" onClick={onBack} disabled={loading} className="flex-1">Back</Button>
       <Button onClick={onNext} disabled={loading} className="flex-1">
-        {loading ? "Saving..." : "Continue"}
+        {loading ? "Saving..." : (nextLabel ?? "Continue")}
       </Button>
     </div>
   );
