@@ -127,7 +127,7 @@ function OnboardingPage() {
         setSelectedStudentId(studentRows[0].id);
         setRegisteringChild(true);
       }
-      if (profile?.waiver_signed) setStep(3);
+      if (profile?.waiver_signed) { setStep(3); setReturningClient(true); }
     })();
     return () => { cancelled = true; };
   }, []);
