@@ -16,36 +16,48 @@ export type Database = {
     Tables: {
       bookings: {
         Row: {
+          canceled_at: string | null
           cancellation_status: string
           created_at: string
           id: string
           lesson_id: string
           payment_status: string
           profile_id: string
+          reminder_sent_at: string | null
           signed_at: string | null
           signed_waiver: boolean
+          stripe_payment_intent_id: string | null
+          stripe_payment_method_id: string | null
           student_id: string | null
         }
         Insert: {
+          canceled_at?: string | null
           cancellation_status?: string
           created_at?: string
           id?: string
           lesson_id: string
           payment_status?: string
           profile_id: string
+          reminder_sent_at?: string | null
           signed_at?: string | null
           signed_waiver?: boolean
+          stripe_payment_intent_id?: string | null
+          stripe_payment_method_id?: string | null
           student_id?: string | null
         }
         Update: {
+          canceled_at?: string | null
           cancellation_status?: string
           created_at?: string
           id?: string
           lesson_id?: string
           payment_status?: string
           profile_id?: string
+          reminder_sent_at?: string | null
           signed_at?: string | null
           signed_waiver?: boolean
+          stripe_payment_intent_id?: string | null
+          stripe_payment_method_id?: string | null
           student_id?: string | null
         }
         Relationships: [
@@ -147,6 +159,7 @@ export type Database = {
       profiles: {
         Row: {
           created_at: string
+          default_payment_method_id: string | null
           email: string | null
           full_name: string | null
           id: string
@@ -161,6 +174,7 @@ export type Database = {
         }
         Insert: {
           created_at?: string
+          default_payment_method_id?: string | null
           email?: string | null
           full_name?: string | null
           id: string
@@ -175,6 +189,7 @@ export type Database = {
         }
         Update: {
           created_at?: string
+          default_payment_method_id?: string | null
           email?: string | null
           full_name?: string | null
           id?: string
@@ -250,6 +265,10 @@ export type Database = {
           id: string
           joined_at: string
           lesson_id: string
+          offer_accepted: boolean | null
+          offer_declined: boolean | null
+          offer_expires_at: string | null
+          offered_at: string | null
           profile_id: string
           student_id: string | null
         }
@@ -257,6 +276,10 @@ export type Database = {
           id?: string
           joined_at?: string
           lesson_id: string
+          offer_accepted?: boolean | null
+          offer_declined?: boolean | null
+          offer_expires_at?: string | null
+          offered_at?: string | null
           profile_id: string
           student_id?: string | null
         }
@@ -264,6 +287,10 @@ export type Database = {
           id?: string
           joined_at?: string
           lesson_id?: string
+          offer_accepted?: boolean | null
+          offer_declined?: boolean | null
+          offer_expires_at?: string | null
+          offered_at?: string | null
           profile_id?: string
           student_id?: string | null
         }
