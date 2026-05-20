@@ -6,9 +6,10 @@ interface LessonCheckoutProps {
   lessonId: string;
   studentId?: string | null;
   returnUrl?: string;
+  stayForMatchPlay?: boolean;
 }
 
-export function LessonCheckout({ lessonId, studentId, returnUrl }: LessonCheckoutProps) {
+export function LessonCheckout({ lessonId, studentId, returnUrl, stayForMatchPlay }: LessonCheckoutProps) {
   const fetchClientSecret = async (): Promise<string> => {
     const secret = await createLessonBookingCheckout({
       data: {
@@ -16,6 +17,7 @@ export function LessonCheckout({ lessonId, studentId, returnUrl }: LessonCheckou
         studentId: studentId ?? null,
         returnUrl: returnUrl || `${window.location.origin}/checkout/return?session_id={CHECKOUT_SESSION_ID}`,
         environment: getStripeEnvironment(),
+        stayForMatchPlay: stayForMatchPlay === true,
       },
     });
     if (!secret) throw new Error("Failed to start checkout session");

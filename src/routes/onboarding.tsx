@@ -15,9 +15,10 @@ import { Badge } from "@/components/ui/badge";
 import { LessonCheckout } from "@/components/LessonCheckout";
 import { PaymentTestModeBanner } from "@/components/PaymentTestModeBanner";
 import { useServerFn } from "@tanstack/react-start";
-import { payWithSavedCard } from "@/lib/mock-client.functions";
 import { signWaiver } from "@/lib/waiver.functions";
-import { CreditCard } from "lucide-react";
+import { getMatchPlayRoster } from "@/lib/match-play.functions";
+import { presetByType } from "@/lib/lesson-presets";
+import { ChevronLeft, ChevronRight } from "lucide-react";
 
 export const Route = createFileRoute("/onboarding")({
   head: () => ({
@@ -913,22 +914,10 @@ function PaymentStep(props: {
 }) {
   const date = new Date(props.lesson.start_time);
   const navigate = useNavigate();
-  const payNow = useServerFn(payWithSavedCard);
-  const [paying, setPaying] = useState(false);
   const [paid, setPaid] = useState(false);
+  const [stayForMatchPlay, setStayForMatchPlay] = useState(false);
 
-  async function handleSavedCardPay() {
-    setPaying(true);
-    try {
-      await payNow({ data: { lessonId: props.lesson.id, studentId: props.studentId } });
-      setPaid(true);
-      toast.success(`Charged card ending in ${props.savedCardLast4}`);
-    } catch (e) {
-      toast.error(e instanceof Error ? e.message : "Payment failed");
-    } finally {
-      setPaying(false);
-    }
-  }
+  const isMorningMix = props.lesson.lesson_type === "mens_womens_morning_mix";
 
   return (
     <div className="space-y-5">
@@ -949,6 +938,20 @@ function PaymentStep(props: {
         <div className="mt-2 text-2xl font-bold">${props.lesson.price.toFixed(2)}</div>
       </div>
 
+      {isMorningMix && !paid && (
+        <label className="flex cursor-pointer items-start gap-3 rounded-lg border border-border bg-secondary/20 p-3 hover:bg-secondary/40">
+          <Checkbox
+            checked={stayForMatchPlay}
+            onCheckedChange={(v) => setStayForMatchPlay(v === true)}
+            className="mt-0.5"
+          />
+          <div className="text-sm">
+            <div className="font-medium">Staying after for organized match play?</div>
+            <div className="text-xs text-muted-foreground">We'll let other adults know you're sticking around.</div>
+          </div>
+        </label>
+      )}
+
       <div className="rounded-lg border-2 border-accent bg-accent/15 p-4">
         <div className="flex gap-3">
           <AlertTriangle className="h-5 w-5 flex-shrink-0 text-accent-foreground" />
@@ -968,26 +971,12 @@ function PaymentStep(props: {
           <p className="mt-1 text-sm text-muted-foreground">You're all set. See you on the court.</p>
           <Button onClick={() => navigate({ to: "/" })} className="mt-4">Done</Button>
         </div>
-      ) : props.savedCardLast4 ? (
-        <div className="rounded-lg border border-border bg-background p-5">
-          <div className="flex items-center gap-3">
-            <div className="flex h-10 w-10 items-center justify-center rounded-md bg-primary/10 text-primary">
-              <CreditCard className="h-5 w-5" />
-            </div>
-            <div className="flex-1">
-              <div className="text-sm font-semibold">Pay with saved card ending in {props.savedCardLast4}</div>
-              <div className="text-xs text-muted-foreground">Card on file from your last visit</div>
-            </div>
-          </div>
-          <Button onClick={handleSavedCardPay} disabled={paying} className="mt-4 w-full" size="lg">
-            {paying ? "Processing..." : `Pay Now — $${props.lesson.price.toFixed(2)}`}
-          </Button>
-        </div>
       ) : (
         <div className="rounded-lg border border-border bg-background overflow-hidden">
           <LessonCheckout
             lessonId={props.lesson.id}
             studentId={props.studentId}
+            stayForMatchPlay={stayForMatchPlay}
           />
         </div>
       )}
@@ -1000,6 +989,7 @@ function PaymentStep(props: {
     </div>
   );
 }
+
 
 function Field({
   id, label, value, onChange, placeholder, type = "text", inputMode,
