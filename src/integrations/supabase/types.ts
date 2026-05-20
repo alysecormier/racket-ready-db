@@ -26,6 +26,7 @@ export type Database = {
           reminder_sent_at: string | null
           signed_at: string | null
           signed_waiver: boolean
+          stay_for_match_play: boolean
           stripe_payment_intent_id: string | null
           stripe_payment_method_id: string | null
           student_id: string | null
@@ -41,6 +42,7 @@ export type Database = {
           reminder_sent_at?: string | null
           signed_at?: string | null
           signed_waiver?: boolean
+          stay_for_match_play?: boolean
           stripe_payment_intent_id?: string | null
           stripe_payment_method_id?: string | null
           student_id?: string | null
@@ -56,6 +58,7 @@ export type Database = {
           reminder_sent_at?: string | null
           signed_at?: string | null
           signed_waiver?: boolean
+          stay_for_match_play?: boolean
           stripe_payment_intent_id?: string | null
           stripe_payment_method_id?: string | null
           student_id?: string | null
@@ -129,6 +132,7 @@ export type Database = {
           created_at: string
           end_time: string
           id: string
+          lesson_type: string | null
           price: number
           start_time: string
           title: string
@@ -139,6 +143,7 @@ export type Database = {
           created_at?: string
           end_time: string
           id?: string
+          lesson_type?: string | null
           price?: number
           start_time: string
           title: string
@@ -149,6 +154,7 @@ export type Database = {
           created_at?: string
           end_time?: string
           id?: string
+          lesson_type?: string | null
           price?: number
           start_time?: string
           title?: string
