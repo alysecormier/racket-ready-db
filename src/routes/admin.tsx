@@ -424,8 +424,8 @@ function toDateInput(d: Date): string {
   const day = String(d.getDate()).padStart(2, "0");
   return `${y}-${m}-${day}`;
 }
-  );
-}
+
+
 
 function LessonDialog({ lesson, onClose }: { lesson: Lesson | null; onClose: () => void }) {
   const [bookings, setBookings] = useState<Booking[]>([]);
