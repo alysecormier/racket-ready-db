@@ -85,6 +85,7 @@ function OnboardingPage() {
   // step 2
   const [registeringChild, setRegisteringChild] = useState(false);
   const [children, setChildren] = useState<Child[]>([{ name: "", age: "", gender: "" }]);
+  const [adult, setAdult] = useState<Child>({ name: "", age: "", gender: "" });
   const [students, setStudents] = useState<Student[]>([]);
 
   // step 3
@@ -248,6 +249,22 @@ function OnboardingPage() {
       setStudents(inserted ?? []);
       if (inserted && inserted.length > 0) setSelectedStudentId(inserted[0].id);
     } else {
+      // Adult registering themselves — no child/student record needed.
+      if (!adult.name.trim()) {
+        toast.error("Please enter your full name");
+        return;
+      }
+      setLoading(true);
+      const { error } = await supabase
+        .from("profiles")
+        .update({ full_name: adult.name.trim().slice(0, 100) })
+        .eq("id", user.id);
+      setLoading(false);
+      if (error) {
+        toast.error(error.message);
+        return;
+      }
+      setFullName(adult.name.trim());
       setStudents([]);
       setSelectedStudentId(null);
     }
@@ -354,6 +371,7 @@ function OnboardingPage() {
               registeringChild={registeringChild} setRegisteringChild={setRegisteringChild}
               children={children} updateChild={updateChild}
               addChild={addChild} removeChild={removeChild}
+              adult={adult} setAdult={setAdult}
               onBack={() => setStep(0)} onNext={handlePlayerInfo} loading={loading}
             />
           )}
@@ -483,12 +501,25 @@ function PlayerStep(props: {
   children: Child[];
   updateChild: (i: number, p: Partial<Child>) => void;
   addChild: () => void; removeChild: (i: number) => void;
+  adult: Child; setAdult: (v: Child) => void;
   onBack: () => void; onNext: () => void; loading: boolean;
 }) {
+  const genderOptions = (
+    <>
+      <option value="">—</option>
+      <option value="female">Female</option>
+      <option value="male">Male</option>
+      <option value="other">Other</option>
+      <option value="prefer_not_to_say">Prefer not to say</option>
+    </>
+  );
+
   return (
     <div className="space-y-5">
       <div>
-        <h2 className="text-xl font-bold">Player information</h2>
+        <h2 className="text-xl font-bold">
+          {props.registeringChild ? "Player information" : "Adult Player Information"}
+        </h2>
         <p className="text-sm text-muted-foreground">Tell us who's hitting the court.</p>
       </div>
       <label className="flex cursor-pointer items-start gap-3 rounded-lg border border-border bg-secondary/40 p-4 transition-colors hover:bg-secondary/70">
@@ -504,7 +535,7 @@ function PlayerStep(props: {
         </div>
       </label>
 
-      {props.registeringChild && (
+      {props.registeringChild ? (
         <div className="space-y-4">
           {props.children.map((c, i) => (
             <div key={i} className="space-y-3 rounded-lg border border-border bg-background p-4">
@@ -527,11 +558,7 @@ function PlayerStep(props: {
                     onChange={(e) => props.updateChild(i, { gender: e.target.value })}
                     className="flex h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-sm ring-offset-background focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
                   >
-                    <option value="">—</option>
-                    <option value="female">Female</option>
-                    <option value="male">Male</option>
-                    <option value="other">Other</option>
-                    <option value="prefer_not_to_say">Prefer not to say</option>
+                    {genderOptions}
                   </select>
                 </div>
               </div>
@@ -540,6 +567,24 @@ function PlayerStep(props: {
           <Button type="button" variant="outline" onClick={props.addChild} className="w-full">
             <Plus className="mr-2 h-4 w-4" /> Add Another Child
           </Button>
+        </div>
+      ) : (
+        <div className="space-y-3 rounded-lg border border-border bg-background p-4">
+          <Field id="adult-name" label="Full Name" value={props.adult.name} onChange={(v) => props.setAdult({ ...props.adult, name: v })} placeholder="Jane Doe" />
+          <div className="grid grid-cols-2 gap-3">
+            <Field id="adult-age" label="Age" type="number" value={props.adult.age} onChange={(v) => props.setAdult({ ...props.adult, age: v })} placeholder="e.g. 32" />
+            <div className="space-y-1.5">
+              <Label htmlFor="adult-gender">Gender</Label>
+              <select
+                id="adult-gender"
+                value={props.adult.gender}
+                onChange={(e) => props.setAdult({ ...props.adult, gender: e.target.value })}
+                className="flex h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-sm ring-offset-background focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+              >
+                {genderOptions}
+              </select>
+            </div>
+          </div>
         </div>
       )}
 
