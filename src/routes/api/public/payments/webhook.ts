@@ -19,6 +19,7 @@ async function handleCheckoutCompleted(session: any) {
   const lessonId = metadata.lesson_id;
   const profileId = metadata.profile_id;
   const studentId = metadata.student_id || null;
+  const stayForMatchPlay = metadata.stay_for_match_play === "1";
 
   if (!lessonId || !profileId) {
     console.error("Missing lesson_id or profile_id in checkout session metadata", session.id);
@@ -33,6 +34,7 @@ async function handleCheckoutCompleted(session: any) {
     payment_status: "paid" as const,
     cancellation_status: "active" as const,
     stripe_payment_intent_id: paymentIntentId,
+    stay_for_match_play: stayForMatchPlay,
   };
 
   // Idempotent: check if a booking already exists for this lesson+profile (+student)
