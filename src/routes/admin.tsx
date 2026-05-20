@@ -2,22 +2,26 @@ import { createFileRoute, useNavigate, Link } from "@tanstack/react-router";
 import { useEffect, useMemo, useState } from "react";
 import { supabase } from "@/integrations/supabase/client";
 import { useServerFn } from "@tanstack/react-start";
-import { simulateReturningClient } from "@/lib/mock-client.functions";
+import { cancelLessonForWeather } from "@/lib/weather.functions";
+import { LESSON_PRESETS, presetByType, type LessonType } from "@/lib/lesson-presets";
+import { getStripeEnvironment } from "@/lib/stripe";
 import { useAuth } from "@/hooks/use-auth";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Card } from "@/components/ui/card";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Calendar } from "@/components/ui/calendar";
-import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "@/components/ui/dialog";
 import { Badge } from "@/components/ui/badge";
 import { Textarea } from "@/components/ui/textarea";
 import { Separator } from "@/components/ui/separator";
+import { Label } from "@/components/ui/label";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { toast } from "sonner";
 import { Toaster } from "@/components/ui/sonner";
 import {
   Search, Check, X, Clock, Users, DollarSign, FileSignature,
-  Calendar as CalIcon, ListTodo, Plus, LogOut,
+  Calendar as CalIcon, ListTodo, Plus, LogOut, CloudRainWind,
 } from "lucide-react";
 
 export const Route = createFileRoute("/admin")({
