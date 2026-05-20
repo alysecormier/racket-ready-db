@@ -21,8 +21,6 @@ type Lesson = {
   title: string;
   start_time: string;
   end_time: string;
-  location: string | null;
-  description: string | null;
 };
 
 function toICSDate(iso: string): string {
@@ -50,8 +48,8 @@ function buildGoogleUrl(lesson: Lesson): string {
     action: "TEMPLATE",
     text: lesson.title,
     dates: `${toICSDate(lesson.start_time)}/${toICSDate(lesson.end_time)}`,
-    details: lesson.description ?? "Bring your racket!",
-    location: lesson.location ?? "Alyse's Tennis Camp",
+    details: "Bring your racket!",
+    location: "Alyse's Tennis Camp",
   });
   return `https://calendar.google.com/calendar/render?${params.toString()}`;
 }
@@ -69,8 +67,8 @@ function buildICSDataUri(lesson: Lesson): string {
     `DTSTART:${toICSDate(lesson.start_time)}`,
     `DTEND:${toICSDate(lesson.end_time)}`,
     `SUMMARY:${escapeICS(lesson.title)}`,
-    `DESCRIPTION:${escapeICS(lesson.description ?? "Bring your racket!")}`,
-    `LOCATION:${escapeICS(lesson.location ?? "Alyse's Tennis Camp")}`,
+    `DESCRIPTION:${escapeICS("Bring your racket!")}`,
+    `LOCATION:${escapeICS("Alyse's Tennis Camp")}`,
     "END:VEVENT",
     "END:VCALENDAR",
   ];

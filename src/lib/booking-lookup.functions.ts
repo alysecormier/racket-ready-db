@@ -22,7 +22,7 @@ export const getBookingBySession = createServerFn({ method: "POST" })
 
     const { data: lesson, error } = await supabase
       .from("lessons")
-      .select("id, title, start_time, end_time, location, description")
+      .select("id, title, start_time, end_time")
       .eq("id", lessonId)
       .maybeSingle();
     if (error || !lesson) return null;
