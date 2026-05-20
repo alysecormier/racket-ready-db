@@ -125,7 +125,8 @@ function CalendarTab() {
   const [lessons, setLessons] = useState<Lesson[]>([]);
   const [selectedDate, setSelectedDate] = useState<Date | undefined>(new Date());
   const [openLesson, setOpenLesson] = useState<Lesson | null>(null);
-  const [creating, setCreating] = useState(false);
+  const [addOpen, setAddOpen] = useState(false);
+  const [weatherTarget, setWeatherTarget] = useState<Lesson | null>(null);
 
   async function load() {
     const { data } = await supabase.from("lessons").select("*").order("start_time");
@@ -144,25 +145,6 @@ function CalendarTab() {
     return lessons.filter((l) => new Date(l.start_time).toDateString() === d);
   }, [lessons, selectedDate]);
 
-  async function createDemoLesson() {
-    setCreating(true);
-    const start = new Date(selectedDate ?? new Date());
-    start.setHours(16, 0, 0, 0);
-    const end = new Date(start);
-    end.setHours(17, 0, 0, 0);
-    const { error } = await supabase.from("lessons").insert({
-      title: "Junior Group Clinic",
-      start_time: start.toISOString(),
-      end_time: end.toISOString(),
-      capacity: 4,
-      price: 35,
-    });
-    setCreating(false);
-    if (error) { toast.error(error.message); return; }
-    toast.success("Lesson created");
-    load();
-  }
-
   return (
     <div className="grid gap-6 lg:grid-cols-[auto_1fr]">
       <Card className="p-4">
@@ -175,9 +157,9 @@ function CalendarTab() {
             hasLesson: "font-bold relative after:absolute after:bottom-1 after:left-1/2 after:-translate-x-1/2 after:h-1 after:w-1 after:rounded-full after:bg-primary",
           }}
         />
-        <Button onClick={createDemoLesson} disabled={creating} variant="outline" size="sm" className="mt-3 w-full">
+        <Button onClick={() => setAddOpen(true)} variant="outline" size="sm" className="mt-3 w-full">
           <Plus className="mr-2 h-4 w-4" />
-          {creating ? "Adding..." : "Add demo lesson"}
+          Add session
         </Button>
       </Card>
 
@@ -195,29 +177,253 @@ function CalendarTab() {
         ) : (
           <div className="space-y-2">
             {dayLessons.map((l) => (
-              <button
+              <div
                 key={l.id}
-                onClick={() => setOpenLesson(l)}
-                className="flex w-full items-center justify-between rounded-lg border border-border bg-secondary/30 p-3 text-left transition-colors hover:border-primary hover:bg-secondary/60"
+                className="flex w-full items-center gap-2 rounded-lg border border-border bg-secondary/30 p-3 transition-colors hover:border-primary hover:bg-secondary/60"
               >
-                <div>
+                <button
+                  onClick={() => setOpenLesson(l)}
+                  className="flex-1 text-left"
+                >
                   <div className="font-semibold">{l.title}</div>
-                  <div className="mt-0.5 flex items-center gap-3 text-xs text-muted-foreground">
+                  <div className="mt-0.5 flex flex-wrap items-center gap-3 text-xs text-muted-foreground">
                     <span className="inline-flex items-center gap-1"><Clock className="h-3 w-3" />
                       {fmtTime(l.start_time)} – {fmtTime(l.end_time)}
                     </span>
                     <span className="inline-flex items-center gap-1"><Users className="h-3 w-3" />Cap {l.capacity}</span>
                     <span className="inline-flex items-center gap-1"><DollarSign className="h-3 w-3" />${Number(l.price).toFixed(0)}</span>
+                    {l.lesson_type && (
+                      <Badge variant="outline" className="text-[10px]">{presetByType(l.lesson_type)?.label ?? l.lesson_type}</Badge>
+                    )}
                   </div>
-                </div>
-              </button>
+                </button>
+                <Button
+                  variant="ghost"
+                  size="icon"
+                  title="Cancel session due to weather"
+                  aria-label="Cancel session due to weather"
+                  onClick={(e) => { e.stopPropagation(); setWeatherTarget(l); }}
+                  className="text-muted-foreground hover:text-destructive"
+                >
+                  <CloudRainWind className="h-4 w-4" />
+                </Button>
+              </div>
             ))}
           </div>
         )}
       </Card>
 
       <LessonDialog lesson={openLesson} onClose={() => setOpenLesson(null)} />
+      <AddSessionDialog
+        open={addOpen}
+        onOpenChange={setAddOpen}
+        defaultDate={selectedDate ?? new Date()}
+        onCreated={() => { load(); setAddOpen(false); }}
+      />
+      <WeatherCancelDialog
+        lesson={weatherTarget}
+        onClose={() => setWeatherTarget(null)}
+        onDone={() => { setWeatherTarget(null); load(); }}
+      />
     </div>
+  );
+}
+
+function AddSessionDialog(props: {
+  open: boolean;
+  onOpenChange: (v: boolean) => void;
+  defaultDate: Date;
+  onCreated: () => void;
+}) {
+  const [presetType, setPresetType] = useState<LessonType | "custom">("mens_womens_morning_mix");
+  const [dateStr, setDateStr] = useState(toDateInput(props.defaultDate));
+  const [title, setTitle] = useState("");
+  const [price, setPrice] = useState("35");
+  const [capacity, setCapacity] = useState("8");
+  const [startTime, setStartTime] = useState("07:00");
+  const [endTime, setEndTime] = useState("08:30");
+  const [busy, setBusy] = useState(false);
+
+  // When preset changes, prefill the form
+  useEffect(() => {
+    if (presetType === "custom") return;
+    const p = presetByType(presetType);
+    if (!p) return;
+    setTitle(p.label);
+    setPrice(String(p.defaultPrice));
+    setCapacity(String(p.capacity));
+    setStartTime(`${String(p.startHour).padStart(2, "0")}:${String(p.startMinute).padStart(2, "0")}`);
+    setEndTime(`${String(p.endHour).padStart(2, "0")}:${String(p.endMinute).padStart(2, "0")}`);
+  }, [presetType]);
+
+  // Update date when dialog opens with a new default
+  useEffect(() => {
+    if (props.open) setDateStr(toDateInput(props.defaultDate));
+  }, [props.open, props.defaultDate]);
+
+  async function submit() {
+    const priceNum = Number(price);
+    const capNum = parseInt(capacity, 10);
+    if (!title.trim() || !dateStr || !startTime || !endTime) {
+      toast.error("Fill in all fields");
+      return;
+    }
+    if (!isFinite(priceNum) || priceNum < 0) { toast.error("Invalid price"); return; }
+    if (!isFinite(capNum) || capNum < 1) { toast.error("Invalid capacity"); return; }
+
+    const [sh, sm] = startTime.split(":").map(Number);
+    const [eh, em] = endTime.split(":").map(Number);
+    const start = new Date(`${dateStr}T00:00:00`);
+    start.setHours(sh, sm, 0, 0);
+    const end = new Date(`${dateStr}T00:00:00`);
+    end.setHours(eh, em, 0, 0);
+    if (end <= start) { toast.error("End time must be after start"); return; }
+
+    setBusy(true);
+    const { error } = await supabase.from("lessons").insert({
+      title: title.trim().slice(0, 200),
+      start_time: start.toISOString(),
+      end_time: end.toISOString(),
+      capacity: capNum,
+      price: priceNum,
+      lesson_type: presetType === "custom" ? null : presetType,
+    });
+    setBusy(false);
+    if (error) { toast.error(error.message); return; }
+    toast.success("Session added");
+    props.onCreated();
+  }
+
+  const morningMix = presetType === "mens_womens_morning_mix";
+
+  return (
+    <Dialog open={props.open} onOpenChange={props.onOpenChange}>
+      <DialogContent className="sm:max-w-md">
+        <DialogHeader>
+          <DialogTitle>Add session</DialogTitle>
+        </DialogHeader>
+        <div className="space-y-4">
+          <div className="space-y-1.5">
+            <Label>Preset</Label>
+            <Select value={presetType} onValueChange={(v) => setPresetType(v as LessonType | "custom")}>
+              <SelectTrigger><SelectValue /></SelectTrigger>
+              <SelectContent>
+                {LESSON_PRESETS.map((p) => (
+                  <SelectItem key={p.type} value={p.type}>{p.label}</SelectItem>
+                ))}
+                <SelectItem value="custom">Custom…</SelectItem>
+              </SelectContent>
+            </Select>
+          </div>
+          <div className="space-y-1.5">
+            <Label htmlFor="title">Title</Label>
+            <Input id="title" value={title} onChange={(e) => setTitle(e.target.value)} maxLength={200} />
+          </div>
+          <div className="grid grid-cols-2 gap-3">
+            <div className="space-y-1.5">
+              <Label htmlFor="date">Date</Label>
+              <Input id="date" type="date" value={dateStr} onChange={(e) => setDateStr(e.target.value)} />
+            </div>
+            <div className="space-y-1.5">
+              <Label htmlFor="cap">Capacity</Label>
+              <Input id="cap" type="number" min={1} value={capacity} onChange={(e) => setCapacity(e.target.value)} />
+            </div>
+          </div>
+          <div className="grid grid-cols-2 gap-3">
+            <div className="space-y-1.5">
+              <Label htmlFor="start">Start time</Label>
+              <Input id="start" type="time" value={startTime} onChange={(e) => setStartTime(e.target.value)} />
+            </div>
+            <div className="space-y-1.5">
+              <Label htmlFor="end">End time</Label>
+              <Input id="end" type="time" value={endTime} onChange={(e) => setEndTime(e.target.value)} />
+            </div>
+          </div>
+          <div className="space-y-1.5">
+            <Label htmlFor="price">Price (USD){morningMix && <span className="ml-2 text-xs text-muted-foreground">Suggested $35–$40</span>}</Label>
+            <Input id="price" type="number" min={0} step="0.01" value={price} onChange={(e) => setPrice(e.target.value)} />
+          </div>
+        </div>
+        <DialogFooter>
+          <Button variant="ghost" onClick={() => props.onOpenChange(false)} disabled={busy}>Cancel</Button>
+          <Button onClick={submit} disabled={busy}>{busy ? "Adding…" : "Add session"}</Button>
+        </DialogFooter>
+      </DialogContent>
+    </Dialog>
+  );
+}
+
+function WeatherCancelDialog(props: {
+  lesson: Lesson | null;
+  onClose: () => void;
+  onDone: () => void;
+}) {
+  const cancelFn = useServerFn(cancelLessonForWeather);
+  const [busy, setBusy] = useState(false);
+
+  async function confirm() {
+    if (!props.lesson) return;
+    setBusy(true);
+    try {
+      const res = await cancelFn({ data: { lessonId: props.lesson.id, environment: getStripeEnvironment() } });
+      const failures = res.results.filter((r) => r.error).length;
+      if (failures > 0) {
+        toast.warning(`Canceled ${res.canceledCount} booking${res.canceledCount === 1 ? "" : "s"} — ${failures} had issues. Check logs.`);
+      } else {
+        toast.success(`Canceled ${res.canceledCount} booking${res.canceledCount === 1 ? "" : "s"}. SMS sent + refunds issued.`);
+      }
+      props.onDone();
+    } catch (e) {
+      toast.error(e instanceof Error ? e.message : "Cancel failed");
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  if (!props.lesson) return null;
+  return (
+    <Dialog open={!!props.lesson} onOpenChange={(v) => !v && props.onClose()}>
+      <DialogContent className="sm:max-w-md">
+        <DialogHeader>
+          <DialogTitle className="flex items-center gap-2">
+            <CloudRainWind className="h-5 w-5 text-destructive" />
+            Cancel session due to weather
+          </DialogTitle>
+        </DialogHeader>
+        <div className="space-y-3 text-sm">
+          <div className="rounded-lg border border-border bg-secondary/30 p-3">
+            <div className="font-semibold">{props.lesson.title}</div>
+            <div className="text-xs text-muted-foreground">
+              {new Date(props.lesson.start_time).toLocaleString(undefined, {
+                weekday: "long", month: "short", day: "numeric",
+                hour: "numeric", minute: "2-digit",
+              })}
+            </div>
+          </div>
+          <p>This will:</p>
+          <ul className="list-disc space-y-1 pl-5 text-muted-foreground">
+            <li>Cancel every active booking for this session.</li>
+            <li>Refund 100% of each paid booking via Stripe.</li>
+            <li>Text every registered parent/adult about the cancellation.</li>
+          </ul>
+        </div>
+        <DialogFooter>
+          <Button variant="ghost" onClick={props.onClose} disabled={busy}>Keep session</Button>
+          <Button variant="destructive" onClick={confirm} disabled={busy}>
+            {busy ? "Canceling…" : "Confirm rain cancel"}
+          </Button>
+        </DialogFooter>
+      </DialogContent>
+    </Dialog>
+  );
+}
+
+function toDateInput(d: Date): string {
+  const y = d.getFullYear();
+  const m = String(d.getMonth() + 1).padStart(2, "0");
+  const day = String(d.getDate()).padStart(2, "0");
+  return `${y}-${m}-${day}`;
+}
   );
 }
 
