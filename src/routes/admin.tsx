@@ -36,7 +36,7 @@ export const Route = createFileRoute("/admin")({
 
 type Lesson = {
   id: string; title: string; start_time: string; end_time: string;
-  capacity: number; price: number;
+  capacity: number; price: number; lesson_type: string | null;
 };
 type Profile = {
   id: string; full_name: string | null; email: string | null; phone: string | null;
