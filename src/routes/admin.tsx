@@ -103,7 +103,6 @@ function AdminPage() {
       </header>
 
       <main className="mx-auto max-w-7xl px-4 py-6 sm:px-6 sm:py-8">
-        <DevTools />
         <Tabs value={tab} onValueChange={setTab} className="space-y-6">
           <TabsList className="grid w-full grid-cols-3 sm:max-w-xl">
             <TabsTrigger value="calendar"><CalIcon className="mr-2 h-4 w-4" />Calendar</TabsTrigger>
@@ -117,46 +116,6 @@ function AdminPage() {
         </Tabs>
       </main>
     </div>
-  );
-}
-
-function DevTools() {
-  const simulate = useServerFn(simulateReturningClient);
-  const [busy, setBusy] = useState(false);
-  const [info, setInfo] = useState<{ email: string; password: string } | null>(null);
-
-  async function run() {
-    setBusy(true);
-    try {
-      const res = await simulate();
-      setInfo({ email: res.email, password: res.password });
-      toast.success("John Doe is ready. Sign in to test.");
-    } catch (e) {
-      toast.error(e instanceof Error ? e.message : "Failed to seed client");
-    } finally {
-      setBusy(false);
-    }
-  }
-
-  return (
-    <Card className="mb-6 border-dashed border-accent/60 bg-accent/5 p-4">
-      <div className="flex flex-wrap items-center justify-between gap-3">
-        <div>
-          <div className="text-sm font-semibold">🧪 Dev: Simulate Returning Paid Client</div>
-          <div className="text-xs text-muted-foreground">
-            Seeds <code>john@test.com</code> with waiver signed + mock saved card. Sign in as them to skip onboarding and pay instantly.
-          </div>
-          {info && (
-            <div className="mt-2 text-xs">
-              <span className="font-mono">{info.email}</span> / <span className="font-mono">{info.password}</span>
-            </div>
-          )}
-        </div>
-        <Button onClick={run} disabled={busy} size="sm" variant="secondary">
-          {busy ? "Seeding..." : "Simulate Returning Client"}
-        </Button>
-      </div>
-    </Card>
   );
 }
 
