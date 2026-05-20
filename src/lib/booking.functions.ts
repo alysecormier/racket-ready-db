@@ -96,12 +96,14 @@ export const createLessonBookingCheckout = createServerFn({ method: "POST" })
           lesson_id: data.lessonId,
           profile_id: userId,
           ...(data.studentId && { student_id: data.studentId }),
+          stay_for_match_play: data.stayForMatchPlay ? "1" : "0",
         },
       },
       metadata: {
         lesson_id: data.lessonId,
         profile_id: userId,
         ...(data.studentId && { student_id: data.studentId }),
+        stay_for_match_play: data.stayForMatchPlay ? "1" : "0",
       },
     });
 
