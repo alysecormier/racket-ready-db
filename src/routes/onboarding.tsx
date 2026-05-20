@@ -40,6 +40,7 @@ type Lesson = {
   capacity: number;
   price: number;
   booked: number;
+  lesson_type?: string | null;
 };
 
 const signupSchema = z.object({
