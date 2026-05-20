@@ -42,13 +42,14 @@ export const createLessonBookingCheckout = createServerFn({ method: "POST" })
     studentId?: string | null;
     returnUrl: string;
     environment: StripeEnv;
+    stayForMatchPlay?: boolean;
   }) => {
     const uuid = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
     if (!uuid.test(data.lessonId)) throw new Error("Invalid lessonId");
     if (data.studentId && !uuid.test(data.studentId)) throw new Error("Invalid studentId");
     if (typeof data.returnUrl !== "string" || data.returnUrl.length > 500) throw new Error("Invalid returnUrl");
     if (data.environment !== "sandbox" && data.environment !== "live") throw new Error("Invalid environment");
-    return data;
+    return { ...data, stayForMatchPlay: data.stayForMatchPlay === true };
   })
   .handler(async ({ data, context }) => {
     const { supabase, userId, claims } = context;
