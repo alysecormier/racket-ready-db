@@ -219,7 +219,12 @@ function CalendarTab() {
         )}
       </Card>
 
-      <LessonDialog lesson={openLesson} onClose={() => setOpenLesson(null)} />
+      <LessonDialog
+        lesson={openLesson}
+        onClose={() => setOpenLesson(null)}
+        onChanged={(updated) => { load(); if (updated) setOpenLesson(updated); }}
+        onDeleted={() => { load(); setOpenLesson(null); }}
+      />
       <AddSessionDialog
         open={addOpen}
         onOpenChange={setAddOpen}
@@ -241,7 +246,7 @@ function AddSessionDialog(props: {
   defaultDate: Date;
   onCreated: () => void;
 }) {
-  const [presetType, setPresetType] = useState<LessonType | "custom">("mens_womens_morning_mix");
+  const [presetType, setPresetType] = useState<LessonType | "custom">("adult_morning_mix");
   const [dateStr, setDateStr] = useState(toDateInput(props.defaultDate));
   const [title, setTitle] = useState("");
   const [price, setPrice] = useState("35");
@@ -285,6 +290,16 @@ function AddSessionDialog(props: {
     end.setHours(eh, em, 0, 0);
     if (end <= start) { toast.error("End time must be after start"); return; }
 
+    // Weekday validation for presets
+    if (presetType !== "custom") {
+      const preset = presetByType(presetType);
+      const allowed = preset?.allowedDays;
+      if (allowed && allowed.length > 0 && !allowed.includes(start.getDay())) {
+        toast.error("This program only runs on Tuesdays and Thursdays.");
+        return;
+      }
+    }
+
     setBusy(true);
     const { error } = await supabase.from("lessons").insert({
       title: title.trim().slice(0, 200),
@@ -300,7 +315,7 @@ function AddSessionDialog(props: {
     props.onCreated();
   }
 
-  const morningMix = presetType === "mens_womens_morning_mix";
+  const adultMix = presetType === "adult_morning_mix";
 
   return (
     <Dialog open={props.open} onOpenChange={props.onOpenChange}>
@@ -346,7 +361,7 @@ function AddSessionDialog(props: {
             </div>
           </div>
           <div className="space-y-1.5">
-            <Label htmlFor="price">Price (USD){morningMix && <span className="ml-2 text-xs text-muted-foreground">Suggested $35–$40</span>}</Label>
+            <Label htmlFor="price">Price (USD){adultMix && <span className="ml-2 text-xs text-muted-foreground">$35 per person per session</span>}</Label>
             <Input id="price" type="number" min={0} step="0.01" value={price} onChange={(e) => setPrice(e.target.value)} />
           </div>
         </div>
@@ -433,50 +448,252 @@ function toDateInput(d: Date): string {
 
 
 
-function LessonDialog({ lesson, onClose }: { lesson: Lesson | null; onClose: () => void }) {
-  const [bookings, setBookings] = useState<Booking[]>([]);
+function LessonDialog({ lesson, onClose, onChanged, onDeleted }: {
+  lesson: Lesson | null;
+  onClose: () => void;
+  onChanged: (updated: Lesson | null) => void;
+  onDeleted: () => void;
+}) {
+  const [bookings, setBookings] = useState<(Booking & { stay_for_match_play?: boolean })[]>([]);
   const [waitlist, setWaitlist] = useState<Waitlist[]>([]);
   const [profiles, setProfiles] = useState<Record<string, Profile>>({});
   const [students, setStudents] = useState<Record<string, Student>>({});
   const [loading, setLoading] = useState(false);
+  const [confirmDeleteLesson, setConfirmDeleteLesson] = useState(false);
+  const [confirmRemoveBooking, setConfirmRemoveBooking] = useState<string | null>(null);
+  const [confirmMoveFull, setConfirmMoveFull] = useState<Waitlist | null>(null);
+
+  // Edit lesson form
+  const [editing, setEditing] = useState(false);
+  const [eTitle, setETitle] = useState("");
+  const [eDate, setEDate] = useState("");
+  const [eStart, setEStart] = useState("");
+  const [eEnd, setEEnd] = useState("");
+  const [eCap, setECap] = useState("");
+  const [ePrice, setEPrice] = useState("");
+  const [savingEdit, setSavingEdit] = useState(false);
+
+  // Add client search
+  const [search, setSearch] = useState("");
+  const [searchResults, setSearchResults] = useState<Profile[]>([]);
+  const [searching, setSearching] = useState(false);
+  const [selectedProfile, setSelectedProfile] = useState<Profile | null>(null);
+  const [selectedAddStudentId, setSelectedAddStudentId] = useState<string | null>(null);
+  const [profileStudents, setProfileStudents] = useState<Student[]>([]);
+  const [adding, setAdding] = useState(false);
+
+  async function reload(currentLesson: Lesson) {
+    setLoading(true);
+    const [b, w] = await Promise.all([
+      supabase.from("bookings").select("*").eq("lesson_id", currentLesson.id),
+      supabase.from("waitlist").select("*").eq("lesson_id", currentLesson.id).order("joined_at"),
+    ]);
+    const bookingsData = (b.data ?? []) as (Booking & { stay_for_match_play?: boolean })[];
+    const waitlistData = (w.data ?? []) as Waitlist[];
+    setBookings(bookingsData);
+    setWaitlist(waitlistData);
+
+    const profileIds = Array.from(new Set([
+      ...bookingsData.map((x) => x.profile_id),
+      ...waitlistData.map((x) => x.profile_id),
+    ]));
+    const studentIds = Array.from(new Set([
+      ...bookingsData.map((x) => x.student_id).filter(Boolean),
+      ...waitlistData.map((x) => x.student_id).filter(Boolean),
+    ] as string[]));
+
+    const [{ data: pData }, { data: sData }] = await Promise.all([
+      profileIds.length
+        ? supabase.from("profiles").select("*").in("id", profileIds)
+        : Promise.resolve({ data: [] }),
+      studentIds.length
+        ? supabase.from("students").select("*").in("id", studentIds)
+        : Promise.resolve({ data: [] }),
+    ]);
+    setProfiles(Object.fromEntries((pData ?? []).map((p: Profile) => [p.id, p])));
+    setStudents(Object.fromEntries((sData ?? []).map((s: Student) => [s.id, s])));
+    setLoading(false);
+  }
 
   useEffect(() => {
     if (!lesson) return;
-    (async () => {
-      setLoading(true);
-      const [b, w] = await Promise.all([
-        supabase.from("bookings").select("*").eq("lesson_id", lesson.id),
-        supabase.from("waitlist").select("*").eq("lesson_id", lesson.id).order("joined_at"),
-      ]);
-      const bookingsData = (b.data ?? []) as Booking[];
-      const waitlistData = (w.data ?? []) as Waitlist[];
-      setBookings(bookingsData);
-      setWaitlist(waitlistData);
-
-      const profileIds = Array.from(new Set([
-        ...bookingsData.map((x) => x.profile_id),
-        ...waitlistData.map((x) => x.profile_id),
-      ]));
-      const studentIds = Array.from(new Set([
-        ...bookingsData.map((x) => x.student_id).filter(Boolean),
-        ...waitlistData.map((x) => x.student_id).filter(Boolean),
-      ] as string[]));
-
-      const [{ data: pData }, { data: sData }] = await Promise.all([
-        profileIds.length
-          ? supabase.from("profiles").select("*").in("id", profileIds)
-          : Promise.resolve({ data: [] }),
-        studentIds.length
-          ? supabase.from("students").select("*").in("id", studentIds)
-          : Promise.resolve({ data: [] }),
-      ]);
-      setProfiles(Object.fromEntries((pData ?? []).map((p: Profile) => [p.id, p])));
-      setStudents(Object.fromEntries((sData ?? []).map((s: Student) => [s.id, s])));
-      setLoading(false);
-    })();
+    setEditing(false);
+    setSelectedProfile(null);
+    setSearch("");
+    setSearchResults([]);
+    const d = new Date(lesson.start_time);
+    const e = new Date(lesson.end_time);
+    const pad = (n: number) => String(n).padStart(2, "0");
+    setETitle(lesson.title);
+    setEDate(`${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}`);
+    setEStart(`${pad(d.getHours())}:${pad(d.getMinutes())}`);
+    setEEnd(`${pad(e.getHours())}:${pad(e.getMinutes())}`);
+    setECap(String(lesson.capacity));
+    setEPrice(String(lesson.price));
+    reload(lesson);
   }, [lesson]);
 
+  async function refreshLessonRow(currentLesson: Lesson): Promise<Lesson | null> {
+    const { data } = await supabase.from("lessons").select("*").eq("id", currentLesson.id).maybeSingle();
+    return (data ?? null) as Lesson | null;
+  }
+
   if (!lesson) return null;
+  const safeLesson: Lesson = lesson;
+
+  const bookedCount = bookings.length;
+  const isAdultMix = lesson.lesson_type === "adult_morning_mix";
+
+  function findDuplicateBooking(profileId: string, studentId: string | null): boolean {
+    return bookings.some(
+      (b) => b.profile_id === profileId && (b.student_id ?? null) === (studentId ?? null),
+    );
+  }
+
+  async function handleDeleteLesson() {
+    if (!lesson) return;
+    const id = safeLesson.id;
+    await supabase.from("waitlist").delete().eq("lesson_id", id);
+    await supabase.from("bookings").delete().eq("lesson_id", id);
+    const { error } = await supabase.from("lessons").delete().eq("id", id);
+    if (error) { toast.error(error.message); return; }
+    toast.success("Lesson deleted");
+    setConfirmDeleteLesson(false);
+    onDeleted();
+  }
+
+  async function handleRemoveBooking(bookingId: string) {
+    const { error } = await supabase.from("bookings").delete().eq("id", bookingId);
+    if (error) { toast.error(error.message); return; }
+    toast.success("Removed from lesson");
+    setConfirmRemoveBooking(null);
+    await reload(safeLesson);
+    onChanged(safeLesson);
+  }
+
+  async function handleSaveEdit() {
+    if (!eTitle.trim() || !eDate || !eStart || !eEnd) { toast.error("Fill in all fields"); return; }
+    const priceNum = Number(ePrice);
+    const capNum = parseInt(eCap, 10);
+    if (!isFinite(priceNum) || priceNum < 0) { toast.error("Invalid price"); return; }
+    if (!isFinite(capNum) || capNum < 1) { toast.error("Invalid capacity"); return; }
+    const [sh, sm] = eStart.split(":").map(Number);
+    const [eh, em] = eEnd.split(":").map(Number);
+    const start = new Date(`${eDate}T00:00:00`); start.setHours(sh, sm, 0, 0);
+    const end = new Date(`${eDate}T00:00:00`); end.setHours(eh, em, 0, 0);
+    if (end <= start) { toast.error("End time must be after start"); return; }
+    setSavingEdit(true);
+    const { error } = await supabase.from("lessons").update({
+      title: eTitle.trim().slice(0, 200),
+      start_time: start.toISOString(),
+      end_time: end.toISOString(),
+      capacity: capNum,
+      price: priceNum,
+    }).eq("id", safeLesson.id);
+    setSavingEdit(false);
+    if (error) { toast.error(error.message); return; }
+    toast.success("Lesson updated");
+    setEditing(false);
+    const updated = await refreshLessonRow(safeLesson);
+    onChanged(updated);
+  }
+
+  async function handleMoveWaitlist(w: Waitlist, force = false) {
+    if (bookedCount >= safeLesson.capacity && !force) {
+      setConfirmMoveFull(w);
+      return;
+    }
+    if (findDuplicateBooking(w.profile_id, w.student_id)) {
+      toast.error("This player is already in this lesson.");
+      setConfirmMoveFull(null);
+      return;
+    }
+    const profile = profiles[w.profile_id];
+    const { error: insErr } = await supabase.from("bookings").insert({
+      lesson_id: safeLesson.id,
+      profile_id: w.profile_id,
+      student_id: w.student_id,
+      payment_status: "pending",
+      cancellation_status: "active",
+      signed_waiver: profile?.waiver_signed ?? false,
+    });
+    if (insErr) { toast.error(insErr.message); return; }
+    await supabase.from("waitlist").delete().eq("id", w.id);
+    toast.success("Moved into lesson");
+    setConfirmMoveFull(null);
+    await reload(safeLesson);
+    onChanged(safeLesson);
+  }
+
+  async function setPaymentStatus(bookingId: string, status: string) {
+    const { error } = await supabase.from("bookings").update({ payment_status: status }).eq("id", bookingId);
+    if (error) { toast.error(error.message); return; }
+    await reload(safeLesson);
+  }
+  async function setWaiverFlag(bookingId: string, signed: boolean) {
+    const { error } = await supabase.from("bookings").update({ signed_waiver: signed }).eq("id", bookingId);
+    if (error) { toast.error(error.message); return; }
+    await reload(safeLesson);
+  }
+
+  async function runSearch() {
+    const q = search.trim();
+    if (q.length < 2) { setSearchResults([]); return; }
+    setSearching(true);
+    const like = `%${q.replace(/[%_]/g, "")}%`;
+    const { data } = await supabase
+      .from("profiles")
+      .select("*")
+      .or(`full_name.ilike.${like},email.ilike.${like},phone.ilike.${like}`)
+      .limit(10);
+    setSearchResults((data ?? []) as Profile[]);
+    setSearching(false);
+  }
+
+  async function pickProfile(p: Profile) {
+    setSelectedProfile(p);
+    setSelectedAddStudentId(null);
+    const { data } = await supabase.from("students").select("*").eq("parent_id", p.id);
+    setProfileStudents((data ?? []) as Student[]);
+  }
+
+  async function handleAddClient() {
+    if (!selectedProfile) return;
+    const studentId = selectedAddStudentId; // null means adult/self
+    if (findDuplicateBooking(selectedProfile.id, studentId)) {
+      toast.error("This player is already in this lesson.");
+      return;
+    }
+    setAdding(true);
+    const { error } = await supabase.from("bookings").insert({
+      lesson_id: safeLesson.id,
+      profile_id: selectedProfile.id,
+      student_id: studentId,
+      payment_status: "pending",
+      cancellation_status: "active",
+      signed_waiver: selectedProfile.waiver_signed ?? false,
+    });
+    setAdding(false);
+    if (error) { toast.error(error.message); return; }
+    toast.success("Client added to lesson");
+    setSelectedProfile(null);
+    setSearch("");
+    setSearchResults([]);
+    setProfileStudents([]);
+    await reload(safeLesson);
+    onChanged(safeLesson);
+  }
+
+  const matchPlayNames = isAdultMix
+    ? bookings
+        .filter((b) => b.stay_for_match_play === true)
+        .map((b) => {
+          const s = b.student_id ? students[b.student_id] : null;
+          const p = profiles[b.profile_id];
+          return s?.name ?? p?.full_name ?? null;
+        })
+        .filter((n): n is string => Boolean(n))
+    : [];
 
   return (
     <Dialog open={!!lesson} onOpenChange={(v) => !v && onClose()}>
@@ -487,7 +704,7 @@ function LessonDialog({ lesson, onClose }: { lesson: Lesson | null; onClose: () 
             {new Date(lesson.start_time).toLocaleString(undefined, {
               weekday: "long", month: "short", day: "numeric",
               hour: "numeric", minute: "2-digit",
-            })} • {bookings.length} / {lesson.capacity} booked
+            })} • {bookedCount} / {safeLesson.capacity} booked · {waitlist.length} waitlisted
           </p>
         </DialogHeader>
 
@@ -495,6 +712,71 @@ function LessonDialog({ lesson, onClose }: { lesson: Lesson | null; onClose: () 
           <div className="py-8 text-center text-sm text-muted-foreground">Loading…</div>
         ) : (
           <div className="space-y-6">
+            {/* Edit lesson */}
+            <section>
+              <div className="mb-2 flex items-center justify-between">
+                <h3 className="text-sm font-semibold uppercase tracking-wide text-muted-foreground">
+                  Lesson details
+                </h3>
+                <Button size="sm" variant="outline" onClick={() => setEditing((v) => !v)}>
+                  {editing ? "Cancel edit" : "Edit"}
+                </Button>
+              </div>
+              {editing && (
+                <div className="space-y-3 rounded-lg border border-border bg-secondary/20 p-3">
+                  <div className="space-y-1.5">
+                    <Label htmlFor="e-title">Title</Label>
+                    <Input id="e-title" value={eTitle} onChange={(e) => setETitle(e.target.value)} maxLength={200} />
+                  </div>
+                  <div className="grid grid-cols-2 gap-3">
+                    <div className="space-y-1.5">
+                      <Label htmlFor="e-date">Date</Label>
+                      <Input id="e-date" type="date" value={eDate} onChange={(e) => setEDate(e.target.value)} />
+                    </div>
+                    <div className="space-y-1.5">
+                      <Label htmlFor="e-cap">Capacity</Label>
+                      <Input id="e-cap" type="number" min={1} value={eCap} onChange={(e) => setECap(e.target.value)} />
+                    </div>
+                  </div>
+                  <div className="grid grid-cols-2 gap-3">
+                    <div className="space-y-1.5">
+                      <Label htmlFor="e-start">Start</Label>
+                      <Input id="e-start" type="time" value={eStart} onChange={(e) => setEStart(e.target.value)} />
+                    </div>
+                    <div className="space-y-1.5">
+                      <Label htmlFor="e-end">End</Label>
+                      <Input id="e-end" type="time" value={eEnd} onChange={(e) => setEEnd(e.target.value)} />
+                    </div>
+                  </div>
+                  <div className="space-y-1.5">
+                    <Label htmlFor="e-price">Price (USD)</Label>
+                    <Input id="e-price" type="number" min={0} step="0.01" value={ePrice} onChange={(e) => setEPrice(e.target.value)} />
+                  </div>
+                  <Button onClick={handleSaveEdit} disabled={savingEdit} size="sm">
+                    {savingEdit ? "Saving…" : "Save changes"}
+                  </Button>
+                </div>
+              )}
+            </section>
+
+            {isAdultMix && (
+              <>
+                <Separator />
+                <section>
+                  <h3 className="mb-2 text-sm font-semibold uppercase tracking-wide text-muted-foreground">
+                    Staying for organized match play ({matchPlayNames.length})
+                  </h3>
+                  {matchPlayNames.length === 0 ? (
+                    <p className="text-sm text-muted-foreground">Nobody yet.</p>
+                  ) : (
+                    <p className="text-sm">{matchPlayNames.join(", ")}</p>
+                  )}
+                </section>
+              </>
+            )}
+
+            <Separator />
+
             <section>
               <h3 className="mb-2 text-sm font-semibold uppercase tracking-wide text-muted-foreground">
                 Attending ({bookings.length})
@@ -510,7 +792,7 @@ function LessonDialog({ lesson, onClose }: { lesson: Lesson | null; onClose: () 
                     return (
                       <div key={b.id} className="rounded-lg border border-border bg-background p-3">
                         <div className="flex items-start justify-between gap-3">
-                          <div>
+                          <div className="min-w-0">
                             <div className="font-medium">{displayName}</div>
                             <div className="text-xs text-muted-foreground">
                               {student?.age != null ? `Age ${student.age}` : "Adult"}
@@ -521,6 +803,30 @@ function LessonDialog({ lesson, onClose }: { lesson: Lesson | null; onClose: () 
                             <PaymentBadge status={b.payment_status} />
                             <WaiverBadge signed={b.signed_waiver || profile?.waiver_signed} />
                           </div>
+                        </div>
+                        <div className="mt-3 flex flex-wrap items-center gap-2">
+                          <Select value={b.payment_status} onValueChange={(v) => setPaymentStatus(b.id, v)}>
+                            <SelectTrigger className="h-8 w-[140px] text-xs"><SelectValue /></SelectTrigger>
+                            <SelectContent>
+                              <SelectItem value="pending">Pending</SelectItem>
+                              <SelectItem value="paid">Paid</SelectItem>
+                              <SelectItem value="refunded">Refunded</SelectItem>
+                            </SelectContent>
+                          </Select>
+                          <Select value={b.signed_waiver ? "signed" : "unsigned"} onValueChange={(v) => setWaiverFlag(b.id, v === "signed")}>
+                            <SelectTrigger className="h-8 w-[140px] text-xs"><SelectValue /></SelectTrigger>
+                            <SelectContent>
+                              <SelectItem value="signed">Waiver signed</SelectItem>
+                              <SelectItem value="unsigned">Waiver unsigned</SelectItem>
+                            </SelectContent>
+                          </Select>
+                          <Button
+                            size="sm" variant="ghost"
+                            className="ml-auto text-destructive hover:text-destructive"
+                            onClick={() => setConfirmRemoveBooking(b.id)}
+                          >
+                            <Trash2 className="mr-1 h-3 w-3" /> Remove
+                          </Button>
                         </div>
                       </div>
                     );
@@ -547,26 +853,160 @@ function LessonDialog({ lesson, onClose }: { lesson: Lesson | null; onClose: () 
                         <div className="flex h-7 w-7 items-center justify-center rounded-full bg-primary text-xs font-bold text-primary-foreground">
                           {i + 1}
                         </div>
-                        <div className="flex-1">
-                          <div className="text-sm font-medium">
+                        <div className="flex-1 min-w-0">
+                          <div className="text-sm font-medium truncate">
                             {student?.name ?? profile?.full_name ?? "Unknown"}
                           </div>
                           <div className="text-xs text-muted-foreground">
                             Joined {new Date(w.joined_at).toLocaleDateString()}
                           </div>
                         </div>
+                        <Button size="sm" variant="outline" onClick={() => handleMoveWaitlist(w)}>
+                          Move to lesson
+                        </Button>
                       </li>
                     );
                   })}
                 </ol>
               )}
             </section>
+
+            <Separator />
+
+            <section>
+              <h3 className="mb-2 text-sm font-semibold uppercase tracking-wide text-muted-foreground">
+                Add client manually
+              </h3>
+              {selectedProfile ? (
+                <div className="space-y-3 rounded-lg border border-border bg-secondary/20 p-3">
+                  <div className="text-sm">
+                    <div className="font-medium">{selectedProfile.full_name ?? "Unnamed"}</div>
+                    <div className="text-xs text-muted-foreground">{selectedProfile.email}</div>
+                  </div>
+                  <div className="space-y-1.5">
+                    <Label className="text-xs">Player</Label>
+                    <Select
+                      value={selectedAddStudentId ?? "__adult"}
+                      onValueChange={(v) => setSelectedAddStudentId(v === "__adult" ? null : v)}
+                    >
+                      <SelectTrigger><SelectValue /></SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="__adult">Adult / self</SelectItem>
+                        {profileStudents.map((s) => (
+                          <SelectItem key={s.id} value={s.id}>{s.name}{s.age != null ? ` (age ${s.age})` : ""}</SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+                  </div>
+                  <div className="flex gap-2">
+                    <Button size="sm" onClick={handleAddClient} disabled={adding}>
+                      {adding ? "Adding…" : "Add to lesson"}
+                    </Button>
+                    <Button size="sm" variant="ghost" onClick={() => { setSelectedProfile(null); setProfileStudents([]); }}>Cancel</Button>
+                  </div>
+                </div>
+              ) : (
+                <div className="space-y-2">
+                  <div className="flex gap-2">
+                    <Input
+                      placeholder="Search name, email, or phone…"
+                      value={search}
+                      onChange={(e) => setSearch(e.target.value)}
+                      onKeyDown={(e) => { if (e.key === "Enter") runSearch(); }}
+                    />
+                    <Button size="sm" variant="outline" onClick={runSearch} disabled={searching}>
+                      {searching ? "…" : <Search className="h-4 w-4" />}
+                    </Button>
+                  </div>
+                  {searchResults.length > 0 && (
+                    <ul className="space-y-1">
+                      {searchResults.map((p) => (
+                        <li key={p.id}>
+                          <button
+                            className="w-full rounded-md border border-border bg-background p-2 text-left hover:bg-secondary/40"
+                            onClick={() => pickProfile(p)}
+                          >
+                            <div className="text-sm font-medium">{p.full_name ?? "Unnamed"}</div>
+                            <div className="text-xs text-muted-foreground">{p.email}{p.phone ? ` · ${p.phone}` : ""}</div>
+                          </button>
+                        </li>
+                      ))}
+                    </ul>
+                  )}
+                </div>
+              )}
+            </section>
+
+            <Separator />
+
+            <section>
+              <Button variant="destructive" size="sm" onClick={() => setConfirmDeleteLesson(true)}>
+                <Trash2 className="mr-2 h-4 w-4" /> Delete lesson
+              </Button>
+            </section>
           </div>
         )}
+
+        <AlertDialog open={confirmDeleteLesson} onOpenChange={setConfirmDeleteLesson}>
+          <AlertDialogContent>
+            <AlertDialogHeader>
+              <AlertDialogTitle>Delete this lesson?</AlertDialogTitle>
+              <AlertDialogDescription>
+                This removes the lesson plus every booking and waitlist entry attached to it.
+                This cannot be undone.
+              </AlertDialogDescription>
+            </AlertDialogHeader>
+            <AlertDialogFooter>
+              <AlertDialogCancel>Cancel</AlertDialogCancel>
+              <AlertDialogAction
+                onClick={(e) => { e.preventDefault(); handleDeleteLesson(); }}
+                className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
+              >
+                Delete lesson
+              </AlertDialogAction>
+            </AlertDialogFooter>
+          </AlertDialogContent>
+        </AlertDialog>
+
+        <AlertDialog open={!!confirmRemoveBooking} onOpenChange={(v) => !v && setConfirmRemoveBooking(null)}>
+          <AlertDialogContent>
+            <AlertDialogHeader>
+              <AlertDialogTitle>Remove this player from the lesson?</AlertDialogTitle>
+              <AlertDialogDescription>The booking will be deleted.</AlertDialogDescription>
+            </AlertDialogHeader>
+            <AlertDialogFooter>
+              <AlertDialogCancel>Cancel</AlertDialogCancel>
+              <AlertDialogAction
+                onClick={(e) => { e.preventDefault(); if (confirmRemoveBooking) handleRemoveBooking(confirmRemoveBooking); }}
+                className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
+              >
+                Remove
+              </AlertDialogAction>
+            </AlertDialogFooter>
+          </AlertDialogContent>
+        </AlertDialog>
+
+        <AlertDialog open={!!confirmMoveFull} onOpenChange={(v) => !v && setConfirmMoveFull(null)}>
+          <AlertDialogContent>
+            <AlertDialogHeader>
+              <AlertDialogTitle>This lesson is full</AlertDialogTitle>
+              <AlertDialogDescription>Move this player anyway?</AlertDialogDescription>
+            </AlertDialogHeader>
+            <AlertDialogFooter>
+              <AlertDialogCancel>Cancel</AlertDialogCancel>
+              <AlertDialogAction
+                onClick={(e) => { e.preventDefault(); if (confirmMoveFull) handleMoveWaitlist(confirmMoveFull, true); }}
+              >
+                Move anyway
+              </AlertDialogAction>
+            </AlertDialogFooter>
+          </AlertDialogContent>
+        </AlertDialog>
       </DialogContent>
     </Dialog>
   );
 }
+
 
 function PaymentBadge({ status }: { status: string }) {
   const paid = status === "paid";

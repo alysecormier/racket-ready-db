@@ -17,7 +17,7 @@ import { PaymentTestModeBanner } from "@/components/PaymentTestModeBanner";
 import { useServerFn } from "@tanstack/react-start";
 import { signWaiver } from "@/lib/waiver.functions";
 import { getMatchPlayRoster } from "@/lib/match-play.functions";
-import { presetByType } from "@/lib/lesson-presets";
+import { presetByType, recommendedPresetForAge } from "@/lib/lesson-presets";
 import { ChevronLeft, ChevronRight } from "lucide-react";
 
 export const Route = createFileRoute("/onboarding")({
@@ -31,7 +31,7 @@ export const Route = createFileRoute("/onboarding")({
 });
 
 type Child = { name: string; age: string; gender: string };
-type Student = { id: string; name: string };
+type Student = { id: string; name: string; age?: number | null };
 type Lesson = {
   id: string;
   title: string;
@@ -45,6 +45,7 @@ type Lesson = {
 type LessonCartItem = {
   lessonId: string;
   studentId: string | null;
+  stayForMatchPlay?: boolean;
 };
 
 const signupSchema = z.object({
@@ -132,7 +133,7 @@ function OnboardingPage() {
   const addChild = () => setChildren((a) => [...a, { name: "", age: "", gender: "" }]);
   const removeChild = (i: number) => setChildren((a) => a.filter((_, idx) => idx !== i));
 
-  function addLessonToCart(lessonId: string, studentId: string | null) {
+  function addLessonToCart(lessonId: string, studentId: string | null, stayForMatchPlay?: boolean) {
     if (lessonCart.length >= 100) {
       toast.error("You can only add up to 100 registrations at a time.");
       return;
@@ -144,7 +145,7 @@ function OnboardingPage() {
       toast.error("This player is already added for this lesson.");
       return;
     }
-    setLessonCart((cart) => [...cart, { lessonId, studentId }]);
+    setLessonCart((cart) => [...cart, { lessonId, studentId, stayForMatchPlay: stayForMatchPlay === true }]);
     toast.success("Added to registration cart");
   }
 
@@ -202,7 +203,7 @@ function OnboardingPage() {
     const userId = authData.user.id;
     const [{ data: profile }, { data: studentRows }] = await Promise.all([
       supabase.from("profiles").select("waiver_signed, full_name, phone, email, saved_card_last4, stripe_customer_id").eq("id", userId).maybeSingle(),
-      supabase.from("students").select("id, name").eq("parent_id", userId),
+      supabase.from("students").select("id, name, age").eq("parent_id", userId),
     ]);
     setLoading(false);
     if (profile) {
@@ -310,7 +311,7 @@ function OnboardingPage() {
       const [{ data: lessonRows, error: lessonErr }, { data: bookingRows }] = await Promise.all([
         supabase
           .from("lessons")
-          .select("id, title, start_time, end_time, capacity, price")
+          .select("id, title, start_time, end_time, capacity, price, lesson_type")
           .gte("start_time", nowIso)
           .order("start_time", { ascending: true })
           .limit(20),
@@ -1006,7 +1007,7 @@ function PaymentStep(props: {
 
   const total = items.reduce((sum, { lesson }) => sum + lesson.price, 0);
   const single = items.length === 1 ? items[0] : null;
-  const isMorningMix = single?.lesson.lesson_type === "mens_womens_morning_mix";
+  const isMorningMix = single?.lesson.lesson_type === "adult_morning_mix";
 
   return (
     <div className="space-y-5">
