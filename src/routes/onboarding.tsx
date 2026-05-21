@@ -17,7 +17,7 @@ import { PaymentTestModeBanner } from "@/components/PaymentTestModeBanner";
 import { useServerFn } from "@tanstack/react-start";
 import { signWaiver } from "@/lib/waiver.functions";
 import { getMatchPlayRoster } from "@/lib/match-play.functions";
-import { presetByType } from "@/lib/lesson-presets";
+import { presetByType, recommendedPresetForAge } from "@/lib/lesson-presets";
 import { ChevronLeft, ChevronRight } from "lucide-react";
 
 export const Route = createFileRoute("/onboarding")({
