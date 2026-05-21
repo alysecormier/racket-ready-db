@@ -404,8 +404,9 @@ function OnboardingPage() {
             <LessonStep
               lessons={lessons}
               loading={lessonsLoading}
-              selectedLessonId={selectedLessonId}
-              setSelectedLessonId={setSelectedLessonId}
+              lessonCart={lessonCart}
+              addLessonToCart={addLessonToCart}
+              removeLessonFromCart={removeLessonFromCart}
               students={students}
               selectedStudentId={selectedStudentId}
               setSelectedStudentId={setSelectedStudentId}
@@ -414,10 +415,11 @@ function OnboardingPage() {
               onNext={handleConfirmLesson}
             />
           )}
-          {step === 4 && selectedLesson && (
+          {step === 4 && lessonCart.length > 0 && (
             <PaymentStep
-              lesson={selectedLesson}
-              studentId={selectedStudentId}
+              lessonCart={lessonCart}
+              lessons={lessons}
+              students={students}
               savedCardLast4={savedCardLast4}
               onBack={() => setStep(3)}
               onCancel={() => navigate({ to: "/" })}
