@@ -567,8 +567,8 @@ function LessonDialog({ lesson, onClose, onChanged, onDeleted }: {
     if (error) { toast.error(error.message); return; }
     toast.success("Removed from lesson");
     setConfirmRemoveBooking(null);
-    await reload(lesson);
-    onChanged(lesson);
+    await reload(safeLesson);
+    onChanged(safeLesson);
   }
 
   async function handleSaveEdit() {
@@ -594,7 +594,7 @@ function LessonDialog({ lesson, onClose, onChanged, onDeleted }: {
     if (error) { toast.error(error.message); return; }
     toast.success("Lesson updated");
     setEditing(false);
-    const updated = await refreshLessonRow(lesson);
+    const updated = await refreshLessonRow(safeLesson);
     onChanged(updated);
   }
 
@@ -621,19 +621,19 @@ function LessonDialog({ lesson, onClose, onChanged, onDeleted }: {
     await supabase.from("waitlist").delete().eq("id", w.id);
     toast.success("Moved into lesson");
     setConfirmMoveFull(null);
-    await reload(lesson);
-    onChanged(lesson);
+    await reload(safeLesson);
+    onChanged(safeLesson);
   }
 
   async function setPaymentStatus(bookingId: string, status: string) {
     const { error } = await supabase.from("bookings").update({ payment_status: status }).eq("id", bookingId);
     if (error) { toast.error(error.message); return; }
-    await reload(lesson);
+    await reload(safeLesson);
   }
   async function setWaiverFlag(bookingId: string, signed: boolean) {
     const { error } = await supabase.from("bookings").update({ signed_waiver: signed }).eq("id", bookingId);
     if (error) { toast.error(error.message); return; }
-    await reload(lesson);
+    await reload(safeLesson);
   }
 
   async function runSearch() {
@@ -680,8 +680,8 @@ function LessonDialog({ lesson, onClose, onChanged, onDeleted }: {
     setSearch("");
     setSearchResults([]);
     setProfileStudents([]);
-    await reload(lesson);
-    onChanged(lesson);
+    await reload(safeLesson);
+    onChanged(safeLesson);
   }
 
   const matchPlayNames = isAdultMix
