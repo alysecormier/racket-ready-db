@@ -356,7 +356,7 @@ function AddSessionDialog(props: {
             </div>
           </div>
           <div className="space-y-1.5">
-            <Label htmlFor="price">Price (USD){morningMix && <span className="ml-2 text-xs text-muted-foreground">Suggested $35–$40</span>}</Label>
+            <Label htmlFor="price">Price (USD){adultMix && <span className="ml-2 text-xs text-muted-foreground">$35 per person per session</span>}</Label>
             <Input id="price" type="number" min={0} step="0.01" value={price} onChange={(e) => setPrice(e.target.value)} />
           </div>
         </div>
