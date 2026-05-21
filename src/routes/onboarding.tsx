@@ -104,38 +104,24 @@ function OnboardingPage() {
   const [savedCardLast4, setSavedCardLast4] = useState<string | null>(null);
   const [returningClient, setReturningClient] = useState(false);
 
-  // On mount: if already signed in & waiver complete, jump to lesson select
-  useEffect(() => {
-    let cancelled = false;
-    (async () => {
-      const { data: { user } } = await supabase.auth.getUser();
-      if (!user || cancelled) return;
-      const [{ data: profile }, { data: studentRows }] = await Promise.all([
-        supabase
-          .from("profiles")
-          .select("waiver_signed, full_name, phone, email, saved_card_last4, stripe_customer_id")
-          .eq("id", user.id)
-          .maybeSingle(),
-        supabase.from("students").select("id, name").eq("parent_id", user.id),
-      ]);
-      if (cancelled) return;
-      if (profile) {
-        setFullName(profile.full_name ?? "");
-        setPhone(profile.phone ?? "");
-        setEmail(profile.email ?? user.email ?? "");
-        if (profile.saved_card_last4 && profile.stripe_customer_id) {
-          setSavedCardLast4(profile.saved_card_last4);
-        }
-      }
-      if (studentRows && studentRows.length > 0) {
-        setStudents(studentRows);
-        setSelectedStudentId(studentRows[0].id);
-        setRegisteringChild(true);
-      }
-      if (profile?.waiver_signed) { setStep(3); setReturningClient(true); }
-    })();
-    return () => { cancelled = true; };
-  }, []);
+  // Privacy: do NOT preload profile/students/waiver/card from an existing session on mount.
+  // The portal must always open at step 0 (Sign Up). Returning clients must explicitly sign in.
+
+  async function startFresh() {
+    await supabase.auth.signOut();
+    setFullName("");
+    setEmail("");
+    setPhone("");
+    setPassword("");
+    setStudents([]);
+    setSelectedStudentId(null);
+    setRegisteringChild(false);
+    setChildren([{ name: "", age: "", gender: "" }]);
+    setSavedCardLast4(null);
+    setReturningClient(false);
+    setSelectedLessonId(null);
+    setStep(0);
+  }
 
   const updateChild = (i: number, patch: Partial<Child>) =>
     setChildren((arr) => arr.map((c, idx) => (idx === i ? { ...c, ...patch } : c)));
