@@ -20,18 +20,19 @@ export const deleteClient = createServerFn({ method: "POST" })
     const clientId = data.clientId;
 
     // Cascade deletes via service role (bypasses RLS)
-    const steps: Array<{ label: string; run: () => Promise<{ error: unknown }> }> = [
-      { label: "bookings", run: () => supabaseAdmin.from("bookings").delete().eq("profile_id", clientId) },
-      { label: "waitlist", run: () => supabaseAdmin.from("waitlist").delete().eq("profile_id", clientId) },
-      { label: "coach_notes", run: () => supabaseAdmin.from("coach_notes").delete().eq("client_id", clientId) },
-      { label: "students", run: () => supabaseAdmin.from("students").delete().eq("parent_id", clientId) },
-      { label: "profile", run: () => supabaseAdmin.from("profiles").delete().eq("id", clientId) },
+    const steps: Array<{ label: string; run: () => Promise<{ error: { message: string } | null }> }> = [
+      { label: "bookings", run: async () => await supabaseAdmin.from("bookings").delete().eq("profile_id", clientId) },
+      { label: "waitlist", run: async () => await supabaseAdmin.from("waitlist").delete().eq("profile_id", clientId) },
+      { label: "coach_notes", run: async () => await supabaseAdmin.from("coach_notes").delete().eq("client_id", clientId) },
+      { label: "students", run: async () => await supabaseAdmin.from("students").delete().eq("parent_id", clientId) },
+      { label: "profile", run: async () => await supabaseAdmin.from("profiles").delete().eq("id", clientId) },
     ];
 
     for (const s of steps) {
       const { error } = await s.run();
-      if (error) throw new Error(`Failed to delete ${s.label}: ${(error as { message?: string }).message ?? "unknown"}`);
+      if (error) throw new Error(`Failed to delete ${s.label}: ${error.message}`);
     }
+
 
     return { ok: true };
   });
