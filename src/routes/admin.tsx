@@ -241,7 +241,7 @@ function AddSessionDialog(props: {
   defaultDate: Date;
   onCreated: () => void;
 }) {
-  const [presetType, setPresetType] = useState<LessonType | "custom">("mens_womens_morning_mix");
+  const [presetType, setPresetType] = useState<LessonType | "custom">("adult_morning_mix");
   const [dateStr, setDateStr] = useState(toDateInput(props.defaultDate));
   const [title, setTitle] = useState("");
   const [price, setPrice] = useState("35");
