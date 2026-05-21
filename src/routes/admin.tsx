@@ -12,6 +12,10 @@ import { Card } from "@/components/ui/card";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Calendar } from "@/components/ui/calendar";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "@/components/ui/dialog";
+import {
+  AlertDialog, AlertDialogContent, AlertDialogHeader, AlertDialogTitle,
+  AlertDialogDescription, AlertDialogFooter, AlertDialogCancel, AlertDialogAction,
+} from "@/components/ui/alert-dialog";
 import { Badge } from "@/components/ui/badge";
 import { Textarea } from "@/components/ui/textarea";
 import { Separator } from "@/components/ui/separator";
@@ -19,10 +23,12 @@ import { Label } from "@/components/ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { toast } from "sonner";
 import { Toaster } from "@/components/ui/sonner";
+import { deleteClient as deleteClientFn } from "@/lib/roster.functions";
 import {
   Search, Check, X, Clock, Users, DollarSign, FileSignature,
-  Calendar as CalIcon, ListTodo, Plus, LogOut, CloudRainWind,
+  Calendar as CalIcon, ListTodo, Plus, LogOut, CloudRainWind, Trash2,
 } from "lucide-react";
+
 
 export const Route = createFileRoute("/admin")({
   head: () => ({
