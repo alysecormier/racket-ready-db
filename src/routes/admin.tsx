@@ -219,7 +219,12 @@ function CalendarTab() {
         )}
       </Card>
 
-      <LessonDialog lesson={openLesson} onClose={() => setOpenLesson(null)} />
+      <LessonDialog
+        lesson={openLesson}
+        onClose={() => setOpenLesson(null)}
+        onChanged={(updated) => { load(); if (updated) setOpenLesson(updated); }}
+        onDeleted={() => { load(); setOpenLesson(null); }}
+      />
       <AddSessionDialog
         open={addOpen}
         onOpenChange={setAddOpen}
