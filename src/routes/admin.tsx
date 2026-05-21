@@ -386,7 +386,7 @@ function WeatherCancelDialog(props: {
     if (!props.lesson) return;
     setBusy(true);
     try {
-      const res = await cancelFn({ data: { lessonId: props.safeLesson.id, environment: getStripeEnvironment() } });
+      const res = await cancelFn({ data: { lessonId: props.lesson.id, environment: getStripeEnvironment() } });
       const failures = res.results.filter((r) => r.error).length;
       if (failures > 0) {
         toast.warning(`Canceled ${res.canceledCount} booking${res.canceledCount === 1 ? "" : "s"} — ${failures} had issues. Check logs.`);
@@ -528,7 +528,7 @@ function LessonDialog({ lesson, onClose, onChanged, onDeleted }: {
     setEDate(`${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}`);
     setEStart(`${pad(d.getHours())}:${pad(d.getMinutes())}`);
     setEEnd(`${pad(e.getHours())}:${pad(e.getMinutes())}`);
-    setECap(String(safeLesson.capacity));
+    setECap(String(lesson.capacity));
     setEPrice(String(lesson.price));
     reload(lesson);
   }, [lesson]);
@@ -1398,8 +1398,8 @@ function WaitlistTab() {
       setItems(
         fullLessons.map((lesson: Lesson) => ({
           lesson,
-          bookedCount: bookCounts[safeLesson.id] ?? 0,
-          entries: (wlByLesson[safeLesson.id] ?? []).map((w) => ({
+          bookedCount: bookCounts[lesson.id] ?? 0,
+          entries: (wlByLesson[lesson.id] ?? []).map((w) => ({
             ...w,
             profile: pMap[w.profile_id],
             student: w.student_id ? sMap[w.student_id] : undefined,
@@ -1427,7 +1427,7 @@ function WaitlistTab() {
   return (
     <div className="space-y-4">
       {items.map(({ lesson, bookedCount, entries }) => (
-        <Card key={safeLesson.id} className="p-5">
+        <Card key={lesson.id} className="p-5">
           <div className="mb-4 flex items-start justify-between gap-3">
             <div>
               <h3 className="text-lg font-bold">{lesson.title}</h3>
@@ -1439,7 +1439,7 @@ function WaitlistTab() {
                     hour: "numeric", minute: "2-digit",
                   })}
                 </span>
-                <Badge variant="destructive">Full · {bookedCount}/{safeLesson.capacity}</Badge>
+                <Badge variant="destructive">Full · {bookedCount}/{lesson.capacity}</Badge>
               </div>
             </div>
             <Badge variant="secondary">{entries.length} waiting</Badge>
