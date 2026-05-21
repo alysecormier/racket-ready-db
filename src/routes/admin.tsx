@@ -386,7 +386,7 @@ function WeatherCancelDialog(props: {
     if (!props.lesson) return;
     setBusy(true);
     try {
-      const res = await cancelFn({ data: { lessonId: props.lesson.id, environment: getStripeEnvironment() } });
+      const res = await cancelFn({ data: { lessonId: props.safeLesson.id, environment: getStripeEnvironment() } });
       const failures = res.results.filter((r) => r.error).length;
       if (failures > 0) {
         toast.warning(`Canceled ${res.canceledCount} booking${res.canceledCount === 1 ? "" : "s"} — ${failures} had issues. Check logs.`);
@@ -528,7 +528,7 @@ function LessonDialog({ lesson, onClose, onChanged, onDeleted }: {
     setEDate(`${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}`);
     setEStart(`${pad(d.getHours())}:${pad(d.getMinutes())}`);
     setEEnd(`${pad(e.getHours())}:${pad(e.getMinutes())}`);
-    setECap(String(lesson.capacity));
+    setECap(String(safeLesson.capacity));
     setEPrice(String(lesson.price));
     reload(lesson);
   }, [lesson]);
@@ -552,7 +552,7 @@ function LessonDialog({ lesson, onClose, onChanged, onDeleted }: {
 
   async function handleDeleteLesson() {
     if (!lesson) return;
-    const id = lesson.id;
+    const id = safeLesson.id;
     await supabase.from("waitlist").delete().eq("lesson_id", id);
     await supabase.from("bookings").delete().eq("lesson_id", id);
     const { error } = await supabase.from("lessons").delete().eq("id", id);
@@ -589,7 +589,7 @@ function LessonDialog({ lesson, onClose, onChanged, onDeleted }: {
       end_time: end.toISOString(),
       capacity: capNum,
       price: priceNum,
-    }).eq("id", lesson.id);
+    }).eq("id", safeLesson.id);
     setSavingEdit(false);
     if (error) { toast.error(error.message); return; }
     toast.success("Lesson updated");
@@ -599,7 +599,7 @@ function LessonDialog({ lesson, onClose, onChanged, onDeleted }: {
   }
 
   async function handleMoveWaitlist(w: Waitlist, force = false) {
-    if (bookedCount >= lesson.capacity && !force) {
+    if (bookedCount >= safeLesson.capacity && !force) {
       setConfirmMoveFull(w);
       return;
     }
@@ -610,7 +610,7 @@ function LessonDialog({ lesson, onClose, onChanged, onDeleted }: {
     }
     const profile = profiles[w.profile_id];
     const { error: insErr } = await supabase.from("bookings").insert({
-      lesson_id: lesson.id,
+      lesson_id: safeLesson.id,
       profile_id: w.profile_id,
       student_id: w.student_id,
       payment_status: "pending",
@@ -666,7 +666,7 @@ function LessonDialog({ lesson, onClose, onChanged, onDeleted }: {
     }
     setAdding(true);
     const { error } = await supabase.from("bookings").insert({
-      lesson_id: lesson.id,
+      lesson_id: safeLesson.id,
       profile_id: selectedProfile.id,
       student_id: studentId,
       payment_status: "pending",
@@ -704,7 +704,7 @@ function LessonDialog({ lesson, onClose, onChanged, onDeleted }: {
             {new Date(lesson.start_time).toLocaleString(undefined, {
               weekday: "long", month: "short", day: "numeric",
               hour: "numeric", minute: "2-digit",
-            })} • {bookedCount} / {lesson.capacity} booked · {waitlist.length} waitlisted
+            })} • {bookedCount} / {safeLesson.capacity} booked · {waitlist.length} waitlisted
           </p>
         </DialogHeader>
 
@@ -1398,8 +1398,8 @@ function WaitlistTab() {
       setItems(
         fullLessons.map((lesson: Lesson) => ({
           lesson,
-          bookedCount: bookCounts[lesson.id] ?? 0,
-          entries: (wlByLesson[lesson.id] ?? []).map((w) => ({
+          bookedCount: bookCounts[safeLesson.id] ?? 0,
+          entries: (wlByLesson[safeLesson.id] ?? []).map((w) => ({
             ...w,
             profile: pMap[w.profile_id],
             student: w.student_id ? sMap[w.student_id] : undefined,
@@ -1427,7 +1427,7 @@ function WaitlistTab() {
   return (
     <div className="space-y-4">
       {items.map(({ lesson, bookedCount, entries }) => (
-        <Card key={lesson.id} className="p-5">
+        <Card key={safeLesson.id} className="p-5">
           <div className="mb-4 flex items-start justify-between gap-3">
             <div>
               <h3 className="text-lg font-bold">{lesson.title}</h3>
@@ -1439,7 +1439,7 @@ function WaitlistTab() {
                     hour: "numeric", minute: "2-digit",
                   })}
                 </span>
-                <Badge variant="destructive">Full · {bookedCount}/{lesson.capacity}</Badge>
+                <Badge variant="destructive">Full · {bookedCount}/{safeLesson.capacity}</Badge>
               </div>
             </div>
             <Badge variant="secondary">{entries.length} waiting</Badge>
