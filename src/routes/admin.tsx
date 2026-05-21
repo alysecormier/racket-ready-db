@@ -669,12 +669,18 @@ function RosterTab() {
 }
 
 
-function ClientDetail({ client }: { client: Profile }) {
+function ClientDetail({ client, onDeleted }: { client: Profile; onDeleted: () => void | Promise<void> }) {
   const { user } = useAuth();
   const [students, setStudents] = useState<Student[]>([]);
   const [notes, setNotes] = useState<{ id: string; note: string; created_at: string }[]>([]);
   const [draft, setDraft] = useState("");
   const [saving, setSaving] = useState(false);
+  const [clientLessons, setClientLessons] = useState<
+    Array<{ booking: Booking; lesson: Lesson; student: Student | null }>
+  >([]);
+  const [confirmDeleteOpen, setConfirmDeleteOpen] = useState(false);
+  const [deleting, setDeleting] = useState(false);
+  const runDelete = useServerFn(deleteClientFn);
 
   async function loadNotes() {
     const { data } = await supabase
@@ -683,10 +689,34 @@ function ClientDetail({ client }: { client: Profile }) {
     setNotes(data ?? []);
   }
 
+  async function loadLessons(studentsList: Student[]) {
+    const { data: bData } = await supabase
+      .from("bookings").select("*").eq("profile_id", client.id);
+    const bookings = (bData ?? []) as Booking[];
+    if (bookings.length === 0) { setClientLessons([]); return; }
+    const lessonIds = Array.from(new Set(bookings.map((b) => b.lesson_id)));
+    const { data: lData } = await supabase
+      .from("lessons").select("*").in("id", lessonIds);
+    const lMap: Record<string, Lesson> = Object.fromEntries(((lData ?? []) as Lesson[]).map((l) => [l.id, l]));
+    const sMap: Record<string, Student> = Object.fromEntries(studentsList.map((s) => [s.id, s]));
+    const rows = bookings
+      .map((b) => ({
+        booking: b,
+        lesson: lMap[b.lesson_id],
+        student: b.student_id ? (sMap[b.student_id] ?? null) : null,
+      }))
+      .filter((r) => r.lesson)
+      .sort((a, b) => new Date(b.lesson.start_time).getTime() - new Date(a.lesson.start_time).getTime());
+    setClientLessons(rows);
+  }
+
   useEffect(() => {
-    supabase.from("students").select("*").eq("parent_id", client.id)
-      .then(({ data }) => setStudents((data ?? []) as Student[]));
-    loadNotes();
+    (async () => {
+      const { data } = await supabase.from("students").select("*").eq("parent_id", client.id);
+      const studentsList = (data ?? []) as Student[];
+      setStudents(studentsList);
+      await Promise.all([loadNotes(), loadLessons(studentsList)]);
+    })();
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [client.id]);
 
@@ -702,6 +732,21 @@ function ClientDetail({ client }: { client: Profile }) {
     toast.success("Note saved");
     loadNotes();
   }
+
+  async function confirmDelete() {
+    setDeleting(true);
+    try {
+      await runDelete({ data: { clientId: client.id } });
+      toast.success("Client deleted");
+      setConfirmDeleteOpen(false);
+      await onDeleted();
+    } catch (e) {
+      toast.error(e instanceof Error ? e.message : "Delete failed");
+    } finally {
+      setDeleting(false);
+    }
+  }
+
 
   return (
     <Card className="p-5 sm:p-6 space-y-6">
