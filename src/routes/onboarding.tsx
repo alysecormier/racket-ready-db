@@ -123,7 +123,7 @@ function OnboardingPage() {
     setChildren([{ name: "", age: "", gender: "" }]);
     setSavedCardLast4(null);
     setReturningClient(false);
-    setSelectedLessonId(null);
+    setLessonCart([]);
     setStep(0);
   }
 
@@ -132,7 +132,25 @@ function OnboardingPage() {
   const addChild = () => setChildren((a) => [...a, { name: "", age: "", gender: "" }]);
   const removeChild = (i: number) => setChildren((a) => a.filter((_, idx) => idx !== i));
 
-  const selectedLesson = lessons.find((l) => l.id === selectedLessonId) ?? null;
+  function addLessonToCart(lessonId: string, studentId: string | null) {
+    if (lessonCart.length >= 100) {
+      toast.error("You can only add up to 100 registrations at a time.");
+      return;
+    }
+    const alreadyAdded = lessonCart.some(
+      (item) => item.lessonId === lessonId && item.studentId === studentId
+    );
+    if (alreadyAdded) {
+      toast.error("This player is already added for this lesson.");
+      return;
+    }
+    setLessonCart((cart) => [...cart, { lessonId, studentId }]);
+    toast.success("Added to registration cart");
+  }
+
+  function removeLessonFromCart(index: number) {
+    setLessonCart((cart) => cart.filter((_, i) => i !== index));
+  }
 
   async function handleSignup() {
     const parsed = signupSchema.safeParse({ fullName, email, phone, password });
