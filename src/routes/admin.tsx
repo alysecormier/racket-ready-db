@@ -593,11 +593,12 @@ function RosterTab() {
   const [q, setQ] = useState("");
   const [selected, setSelected] = useState<Profile | null>(null);
 
-  useEffect(() => {
-    supabase.from("profiles").select("*").order("full_name").then(({ data }) => {
-      setClients((data ?? []) as Profile[]);
-    });
-  }, []);
+  async function loadClients() {
+    const { data } = await supabase.from("profiles").select("*").order("full_name");
+    setClients((data ?? []) as Profile[]);
+  }
+
+  useEffect(() => { loadClients(); }, []);
 
   const filtered = clients.filter((c) => {
     if (!q.trim()) return true;
@@ -648,7 +649,16 @@ function RosterTab() {
       </Card>
 
       <div>
-        {selected ? <ClientDetail key={selected.id} client={selected} /> : (
+        {selected ? (
+          <ClientDetail
+            key={selected.id}
+            client={selected}
+            onDeleted={async () => {
+              setSelected(null);
+              await loadClients();
+            }}
+          />
+        ) : (
           <Card className="flex h-full min-h-[300px] items-center justify-center p-8 text-sm text-muted-foreground">
             Select a client to view details
           </Card>
@@ -657,6 +667,7 @@ function RosterTab() {
     </div>
   );
 }
+
 
 function ClientDetail({ client }: { client: Profile }) {
   const { user } = useAuth();
