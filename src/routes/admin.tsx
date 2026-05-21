@@ -285,6 +285,16 @@ function AddSessionDialog(props: {
     end.setHours(eh, em, 0, 0);
     if (end <= start) { toast.error("End time must be after start"); return; }
 
+    // Weekday validation for presets
+    if (presetType !== "custom") {
+      const preset = presetByType(presetType);
+      const allowed = preset?.allowedDays;
+      if (allowed && allowed.length > 0 && !allowed.includes(start.getDay())) {
+        toast.error("This program only runs on Tuesdays and Thursdays.");
+        return;
+      }
+    }
+
     setBusy(true);
     const { error } = await supabase.from("lessons").insert({
       title: title.trim().slice(0, 200),
@@ -300,7 +310,7 @@ function AddSessionDialog(props: {
     props.onCreated();
   }
 
-  const morningMix = presetType === "mens_womens_morning_mix";
+  const adultMix = presetType === "adult_morning_mix";
 
   return (
     <Dialog open={props.open} onOpenChange={props.onOpenChange}>
