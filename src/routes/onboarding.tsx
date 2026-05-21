@@ -985,39 +985,71 @@ function CalendarView(props: {
 }
 
 function PaymentStep(props: {
-  lesson: Lesson;
-  studentId: string | null;
+  lessonCart: LessonCartItem[];
+  lessons: Lesson[];
+  students: Student[];
   savedCardLast4: string | null;
   onBack: () => void;
   onCancel: () => void;
 }) {
-  const date = new Date(props.lesson.start_time);
   const navigate = useNavigate();
   const [paid, setPaid] = useState(false);
   const [stayForMatchPlay, setStayForMatchPlay] = useState(false);
 
-  const isMorningMix = props.lesson.lesson_type === "mens_womens_morning_mix";
+  const items = props.lessonCart
+    .map((item) => {
+      const lesson = props.lessons.find((l) => l.id === item.lessonId);
+      const student = props.students.find((s) => s.id === item.studentId);
+      return lesson ? { item, lesson, student } : null;
+    })
+    .filter((x): x is { item: LessonCartItem; lesson: Lesson; student: Student | undefined } => x !== null);
+
+  const total = items.reduce((sum, { lesson }) => sum + lesson.price, 0);
+  const single = items.length === 1 ? items[0] : null;
+  const isMorningMix = single?.lesson.lesson_type === "mens_womens_morning_mix";
 
   return (
     <div className="space-y-5">
       <div>
         <h2 className="text-xl font-bold">Secure payment</h2>
-        <p className="text-sm text-muted-foreground">Complete your booking below.</p>
+        <p className="text-sm text-muted-foreground">Review your registrations and complete payment.</p>
       </div>
 
       <div className="rounded-lg border border-border bg-secondary/30 p-4">
-        <div className="text-xs uppercase tracking-wide text-muted-foreground">Booking</div>
-        <div className="mt-1 font-semibold">{props.lesson.title}</div>
-        <div className="text-sm text-muted-foreground">
-          {date.toLocaleString(undefined, {
-            weekday: "long", month: "short", day: "numeric",
-            hour: "numeric", minute: "2-digit",
-          })}
+        <div className="text-xs uppercase tracking-wide text-muted-foreground">
+          Registrations ({items.length})
         </div>
-        <div className="mt-2 text-2xl font-bold">${props.lesson.price.toFixed(2)}</div>
+        <ul className="mt-2 space-y-2">
+          {items.map(({ item, lesson, student }, idx) => {
+            const d = new Date(lesson.start_time);
+            return (
+              <li
+                key={`${item.lessonId}-${item.studentId ?? "adult"}-${idx}`}
+                className="flex items-start justify-between gap-3 border-b border-border/50 pb-2 last:border-b-0 last:pb-0"
+              >
+                <div className="min-w-0 flex-1">
+                  <div className="text-sm font-semibold truncate">
+                    {student?.name ?? "Adult"} — {lesson.title}
+                  </div>
+                  <div className="text-xs text-muted-foreground">
+                    {d.toLocaleString(undefined, {
+                      weekday: "short", month: "short", day: "numeric",
+                      hour: "numeric", minute: "2-digit",
+                    })}
+                  </div>
+                </div>
+                <div className="text-sm font-semibold">${lesson.price.toFixed(2)}</div>
+              </li>
+            );
+          })}
+        </ul>
+        <div className="mt-3 flex items-center justify-between border-t border-border pt-3">
+          <div className="text-sm font-semibold">Total</div>
+          <div className="text-2xl font-bold">${total.toFixed(2)}</div>
+        </div>
       </div>
 
-      {isMorningMix && !paid && (
+      {isMorningMix && single && !paid && (
         <label className="flex cursor-pointer items-start gap-3 rounded-lg border border-border bg-secondary/20 p-3 hover:bg-secondary/40">
           <Checkbox
             checked={stayForMatchPlay}
@@ -1050,19 +1082,23 @@ function PaymentStep(props: {
           <p className="mt-1 text-sm text-muted-foreground">You're all set. See you on the court.</p>
           <Button onClick={() => navigate({ to: "/" })} className="mt-4">Done</Button>
         </div>
-      ) : (
+      ) : single ? (
         <div className="rounded-lg border border-border bg-background overflow-hidden">
           <LessonCheckout
-            lessonId={props.lesson.id}
-            studentId={props.studentId}
+            lessonId={single.lesson.id}
+            studentId={single.item.studentId}
             stayForMatchPlay={stayForMatchPlay}
           />
+        </div>
+      ) : (
+        <div className="rounded-lg border-2 border-dashed border-border bg-secondary/20 p-4 text-sm text-muted-foreground">
+          Multiple-registration checkout is ready in the portal UI. Stripe checkout needs to be updated to charge this cart as one transaction.
         </div>
       )}
 
       {!paid && (
         <Button onClick={props.onBack} variant="ghost" className="w-full">
-          ← Choose a different lesson
+          ← Edit registrations
         </Button>
       )}
     </div>
