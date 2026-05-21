@@ -31,7 +31,7 @@ export const Route = createFileRoute("/onboarding")({
 });
 
 type Child = { name: string; age: string; gender: string };
-type Student = { id: string; name: string };
+type Student = { id: string; name: string; age?: number | null };
 type Lesson = {
   id: string;
   title: string;
@@ -45,6 +45,7 @@ type Lesson = {
 type LessonCartItem = {
   lessonId: string;
   studentId: string | null;
+  stayForMatchPlay?: boolean;
 };
 
 const signupSchema = z.object({
