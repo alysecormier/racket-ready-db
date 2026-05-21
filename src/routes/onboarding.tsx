@@ -133,7 +133,7 @@ function OnboardingPage() {
   const addChild = () => setChildren((a) => [...a, { name: "", age: "", gender: "" }]);
   const removeChild = (i: number) => setChildren((a) => a.filter((_, idx) => idx !== i));
 
-  function addLessonToCart(lessonId: string, studentId: string | null) {
+  function addLessonToCart(lessonId: string, studentId: string | null, stayForMatchPlay?: boolean) {
     if (lessonCart.length >= 100) {
       toast.error("You can only add up to 100 registrations at a time.");
       return;
@@ -145,7 +145,7 @@ function OnboardingPage() {
       toast.error("This player is already added for this lesson.");
       return;
     }
-    setLessonCart((cart) => [...cart, { lessonId, studentId }]);
+    setLessonCart((cart) => [...cart, { lessonId, studentId, stayForMatchPlay: stayForMatchPlay === true }]);
     toast.success("Added to registration cart");
   }
 
