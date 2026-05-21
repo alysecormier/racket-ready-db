@@ -311,7 +311,7 @@ function OnboardingPage() {
       const [{ data: lessonRows, error: lessonErr }, { data: bookingRows }] = await Promise.all([
         supabase
           .from("lessons")
-          .select("id, title, start_time, end_time, capacity, price")
+          .select("id, title, start_time, end_time, capacity, price, lesson_type")
           .gte("start_time", nowIso)
           .order("start_time", { ascending: true })
           .limit(20),
