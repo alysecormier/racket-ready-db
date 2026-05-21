@@ -650,8 +650,9 @@ function WaiverStep(props: {
 function LessonStep(props: {
   lessons: Lesson[];
   loading: boolean;
-  selectedLessonId: string | null;
-  setSelectedLessonId: (v: string) => void;
+  lessonCart: LessonCartItem[];
+  addLessonToCart: (lessonId: string, studentId: string | null) => void;
+  removeLessonFromCart: (index: number) => void;
   students: Student[];
   selectedStudentId: string | null;
   setSelectedStudentId: (v: string) => void;
@@ -662,8 +663,6 @@ function LessonStep(props: {
   const [view, setView] = useState<"calendar" | "list">(props.returningClient ? "calendar" : "list");
   const [waitlistJoining, setWaitlistJoining] = useState<string | null>(null);
   const [waitlistedIds, setWaitlistedIds] = useState<Set<string>>(new Set());
-
-  const selected = props.lessons.find((l) => l.id === props.selectedLessonId) ?? null;
 
   async function joinWaitlist(lessonId: string) {
     setWaitlistJoining(lessonId);
@@ -683,12 +682,20 @@ function LessonStep(props: {
     }
   }
 
+  function handleAdd(lessonId: string) {
+    if (props.students.length > 0 && !props.selectedStudentId) {
+      toast.error("Please choose which player this is for");
+      return;
+    }
+    props.addLessonToCart(lessonId, props.students.length > 0 ? props.selectedStudentId : null);
+  }
+
   return (
     <div className="space-y-5">
       <div className="flex flex-wrap items-start justify-between gap-3">
         <div>
-          <h2 className="text-xl font-bold">Pick a lesson</h2>
-          <p className="text-sm text-muted-foreground">Choose an available time slot to book.</p>
+          <h2 className="text-xl font-bold">Pick lessons</h2>
+          <p className="text-sm text-muted-foreground">Choose a player, then add lessons to your cart.</p>
         </div>
         <ToggleGroup
           type="single"
@@ -731,8 +738,7 @@ function LessonStep(props: {
       ) : view === "calendar" ? (
         <CalendarView
           lessons={props.lessons}
-          selectedLessonId={props.selectedLessonId}
-          onSelect={props.setSelectedLessonId}
+          onAdd={handleAdd}
           onJoinWaitlist={joinWaitlist}
           waitlistJoining={waitlistJoining}
           waitlistedIds={waitlistedIds}
@@ -741,21 +747,13 @@ function LessonStep(props: {
         <div className="space-y-2">
           {props.lessons.map((l) => {
             const isFull = l.booked >= l.capacity;
-            const isSelected = l.id === props.selectedLessonId;
             const date = new Date(l.start_time);
             const end = new Date(l.end_time);
             return (
-              <button
+              <div
                 key={l.id}
-                type="button"
-                disabled={isFull}
-                onClick={() => props.setSelectedLessonId(l.id)}
                 className={`w-full rounded-lg border-2 p-4 text-left transition-all ${
-                  isFull
-                    ? "border-border bg-muted/40 opacity-60 cursor-not-allowed"
-                    : isSelected
-                    ? "border-primary bg-primary/5 shadow-sm"
-                    : "border-border hover:border-primary/40 hover:bg-secondary/30"
+                  isFull ? "border-border bg-muted/40 opacity-60" : "border-border hover:border-primary/40"
                 }`}
               >
                 <div className="flex items-start justify-between gap-3">
@@ -774,36 +772,103 @@ function LessonStep(props: {
                       {isFull && <span className="ml-1 font-semibold text-destructive">Full</span>}
                     </div>
                   </div>
-                  <div className="flex items-center gap-0.5 text-lg font-bold text-primary">
-                    <DollarSign className="h-4 w-4" />
-                    {l.price.toFixed(2)}
+                  <div className="flex flex-col items-end gap-2">
+                    <div className="flex items-center gap-0.5 text-lg font-bold text-primary">
+                      <DollarSign className="h-4 w-4" />
+                      {l.price.toFixed(2)}
+                    </div>
+                    {isFull ? (
+                      waitlistedIds.has(l.id) ? (
+                        <span className="text-xs font-medium text-primary">✓ On waitlist</span>
+                      ) : (
+                        <Button
+                          type="button"
+                          size="sm"
+                          variant="outline"
+                          onClick={() => joinWaitlist(l.id)}
+                          disabled={waitlistJoining === l.id}
+                        >
+                          {waitlistJoining === l.id ? "Joining…" : "Join waitlist"}
+                        </Button>
+                      )
+                    ) : (
+                      <Button
+                        type="button"
+                        size="sm"
+                        onClick={() => handleAdd(l.id)}
+                      >
+                        Add for selected player
+                      </Button>
+                    )}
                   </div>
                 </div>
-              </button>
+              </div>
             );
           })}
         </div>
       )}
 
-      {selected && (
-        <div className="rounded-lg border-2 border-primary/40 bg-primary/5 p-4">
-          <div className="text-xs uppercase tracking-wide text-primary/80 font-semibold">Selected</div>
-          <div className="mt-1 flex items-start justify-between gap-3">
-            <div className="min-w-0">
-              <div className="font-semibold truncate">{selected.title}</div>
-              <div className="text-xs text-muted-foreground mt-0.5">
-                {new Date(selected.start_time).toLocaleString(undefined, {
-                  weekday: "short", month: "short", day: "numeric",
-                  hour: "numeric", minute: "2-digit",
-                })}
-                {" – "}
-                {new Date(selected.end_time).toLocaleTimeString(undefined, { hour: "numeric", minute: "2-digit" })}
-              </div>
-            </div>
-            <div className="text-lg font-bold text-primary">${selected.price.toFixed(2)}</div>
+      <div className="rounded-lg border-2 border-primary/30 bg-primary/5 p-4">
+        <div className="flex items-center justify-between">
+          <div className="text-sm font-semibold uppercase tracking-wide text-primary/80">
+            Registration cart ({props.lessonCart.length})
           </div>
+          {props.lessonCart.length > 0 && (
+            <div className="text-sm font-bold text-primary">
+              Total: ${props.lessonCart
+                .reduce((sum, item) => {
+                  const lesson = props.lessons.find((l) => l.id === item.lessonId);
+                  return sum + (lesson?.price ?? 0);
+                }, 0)
+                .toFixed(2)}
+            </div>
+          )}
         </div>
-      )}
+        {props.lessonCart.length === 0 ? (
+          <p className="mt-2 text-xs text-muted-foreground">
+            No registrations yet. Choose a player and add lessons above.
+          </p>
+        ) : (
+          <ul className="mt-3 space-y-2">
+            {props.lessonCart.map((item, idx) => {
+              const lesson = props.lessons.find((l) => l.id === item.lessonId);
+              const student = props.students.find((s) => s.id === item.studentId);
+              if (!lesson) return null;
+              const d = new Date(lesson.start_time);
+              return (
+                <li
+                  key={`${item.lessonId}-${item.studentId ?? "adult"}-${idx}`}
+                  className="flex items-start justify-between gap-3 rounded-md border border-border bg-background p-3"
+                >
+                  <div className="min-w-0 flex-1">
+                    <div className="text-sm font-semibold truncate">
+                      {student?.name ?? "Adult"} — {lesson.title}
+                    </div>
+                    <div className="text-xs text-muted-foreground">
+                      {d.toLocaleString(undefined, {
+                        weekday: "short", month: "short", day: "numeric",
+                        hour: "numeric", minute: "2-digit",
+                      })}
+                    </div>
+                  </div>
+                  <div className="flex items-center gap-2">
+                    <div className="text-sm font-semibold">${lesson.price.toFixed(2)}</div>
+                    <Button
+                      type="button"
+                      size="icon"
+                      variant="ghost"
+                      onClick={() => props.removeLessonFromCart(idx)}
+                      aria-label="Remove"
+                    >
+                      <Trash2 className="h-4 w-4" />
+                    </Button>
+                  </div>
+                </li>
+              );
+            })}
+          </ul>
+        )}
+      </div>
 
       <NavRow onBack={props.onBack} onNext={props.onNext} loading={false} nextLabel="Continue to payment" />
     </div>
@@ -812,8 +877,7 @@ function LessonStep(props: {
 
 function CalendarView(props: {
   lessons: Lesson[];
-  selectedLessonId: string | null;
-  onSelect: (id: string) => void;
+  onAdd: (lessonId: string) => void;
   onJoinWaitlist: (id: string) => void;
   waitlistJoining: string | null;
   waitlistedIds: Set<string>;
