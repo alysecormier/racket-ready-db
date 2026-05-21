@@ -203,7 +203,7 @@ function OnboardingPage() {
     const userId = authData.user.id;
     const [{ data: profile }, { data: studentRows }] = await Promise.all([
       supabase.from("profiles").select("waiver_signed, full_name, phone, email, saved_card_last4, stripe_customer_id").eq("id", userId).maybeSingle(),
-      supabase.from("students").select("id, name").eq("parent_id", userId),
+      supabase.from("students").select("id, name, age").eq("parent_id", userId),
     ]);
     setLoading(false);
     if (profile) {
