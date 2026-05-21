@@ -926,7 +926,6 @@ function CalendarView(props: {
               ) : (
                 lessons.map((l) => {
                   const isFull = l.booked >= l.capacity;
-                  const isSelected = l.id === props.selectedLessonId;
                   const t = new Date(l.start_time);
                   const time = t.toLocaleTimeString(undefined, { hour: "numeric", minute: "2-digit" });
                   const waitlisted = props.waitlistedIds.has(l.id);
@@ -960,22 +959,19 @@ function CalendarView(props: {
                     <button
                       key={l.id}
                       type="button"
-                      onClick={() => props.onSelect(l.id)}
-                      className={`rounded-md border-2 p-2 text-left transition-all ${
-                        isSelected
-                          ? "border-primary bg-primary text-primary-foreground shadow-md"
-                          : "border-border bg-background hover:border-primary/50 hover:bg-secondary/40"
-                      }`}
+                      onClick={() => props.onAdd(l.id)}
+                      className="rounded-md border-2 border-border bg-background p-2 text-left transition-all hover:border-primary/50 hover:bg-secondary/40"
                     >
-                      <div className={`text-[10px] font-semibold ${isSelected ? "text-primary-foreground/90" : "text-muted-foreground"}`}>
+                      <div className="text-[10px] font-semibold text-muted-foreground">
                         {time}
                       </div>
                       <div className="text-xs font-semibold line-clamp-2 mt-0.5">
                         {l.title}
                       </div>
-                      <div className={`text-[10px] mt-0.5 ${isSelected ? "text-primary-foreground/80" : "text-muted-foreground"}`}>
+                      <div className="text-[10px] mt-0.5 text-muted-foreground">
                         ${l.price.toFixed(0)} · {l.booked}/{l.capacity}
                       </div>
+                      <div className="mt-1 text-[10px] font-medium text-primary">+ Add</div>
                     </button>
                   );
                 })
