@@ -42,6 +42,10 @@ type Lesson = {
   booked: number;
   lesson_type?: string | null;
 };
+type LessonCartItem = {
+  lessonId: string;
+  studentId: string | null;
+};
 
 const signupSchema = z.object({
   fullName: z.string().trim().min(2, "Name is too short").max(100),
