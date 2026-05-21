@@ -340,12 +340,8 @@ function OnboardingPage() {
   }, [step]);
 
   function handleConfirmLesson() {
-    if (!selectedLessonId) {
-      toast.error("Please select a lesson");
-      return;
-    }
-    if (students.length > 0 && !selectedStudentId) {
-      toast.error("Please choose which player this lesson is for");
+    if (lessonCart.length === 0) {
+      toast.error("Please add at least one registration.");
       return;
     }
     setStep(4);
