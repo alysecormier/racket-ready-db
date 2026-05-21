@@ -758,19 +758,78 @@ function ClientDetail({ client, onDeleted }: { client: Profile; onDeleted: () =>
             <div>{client.phone || "No phone"}</div>
           </div>
         </div>
-        <div className="text-right">
-          <div className="text-xs uppercase tracking-wide text-muted-foreground">Waiver</div>
-          {client.waiver_signed ? (
-            <div className="mt-1 inline-flex items-center gap-1.5 rounded-full bg-primary/15 px-3 py-1 text-sm font-semibold text-primary">
-              <Check className="h-4 w-4" /> Signed
-            </div>
-          ) : (
-            <div className="mt-1 inline-flex items-center gap-1.5 rounded-full bg-destructive/15 px-3 py-1 text-sm font-semibold text-destructive">
-              <X className="h-4 w-4" /> Unsigned
-            </div>
-          )}
+        <div className="flex flex-col items-end gap-2">
+          <div className="text-right">
+            <div className="text-xs uppercase tracking-wide text-muted-foreground">Waiver</div>
+            {client.waiver_signed ? (
+              <div className="mt-1 inline-flex items-center gap-1.5 rounded-full bg-primary/15 px-3 py-1 text-sm font-semibold text-primary">
+                <Check className="h-4 w-4" /> Signed
+              </div>
+            ) : (
+              <div className="mt-1 inline-flex items-center gap-1.5 rounded-full bg-destructive/15 px-3 py-1 text-sm font-semibold text-destructive">
+                <X className="h-4 w-4" /> Unsigned
+              </div>
+            )}
+          </div>
+          <Button
+            variant="destructive"
+            size="sm"
+            onClick={() => setConfirmDeleteOpen(true)}
+            disabled={deleting}
+          >
+            <Trash2 className="mr-2 h-4 w-4" />
+            Delete client
+          </Button>
         </div>
       </div>
+
+      <Separator />
+
+      <section>
+        <h3 className="mb-2 text-sm font-semibold uppercase tracking-wide text-muted-foreground">
+          Signed-up lessons ({clientLessons.length})
+        </h3>
+        {clientLessons.length === 0 ? (
+          <p className="text-sm text-muted-foreground">No bookings yet.</p>
+        ) : (
+          <div className="space-y-2">
+            {clientLessons.map(({ booking, lesson, student }) => {
+              const start = new Date(lesson.start_time);
+              const end = new Date(lesson.end_time);
+              return (
+                <div key={booking.id} className="rounded-lg border border-border bg-secondary/30 p-3">
+                  <div className="flex items-start justify-between gap-3">
+                    <div className="min-w-0">
+                      <div className="font-medium">{lesson.title}</div>
+                      <div className="mt-0.5 flex flex-wrap items-center gap-3 text-xs text-muted-foreground">
+                        <span className="inline-flex items-center gap-1">
+                          <CalIcon className="h-3 w-3" />
+                          {start.toLocaleDateString(undefined, { weekday: "short", month: "short", day: "numeric" })}
+                        </span>
+                        <span className="inline-flex items-center gap-1">
+                          <Clock className="h-3 w-3" />
+                          {fmtTime(lesson.start_time)} – {fmtTime(lesson.end_time)}
+                        </span>
+                        <span className="inline-flex items-center gap-1">
+                          <Users className="h-3 w-3" />
+                          {student?.name ?? "Adult"}
+                        </span>
+                      </div>
+                    </div>
+                    <div className="flex flex-col items-end gap-1">
+                      <PaymentBadge status={booking.payment_status} />
+                      <WaiverBadge signed={booking.signed_waiver || client.waiver_signed} />
+                    </div>
+                  </div>
+                  <span className="sr-only">
+                    Ends {end.toISOString()}
+                  </span>
+                </div>
+              );
+            })}
+          </div>
+        )}
+      </section>
 
       <Separator />
 
@@ -793,6 +852,7 @@ function ClientDetail({ client, onDeleted }: { client: Profile; onDeleted: () =>
           </div>
         )}
       </section>
+
 
       <Separator />
 
