@@ -344,6 +344,18 @@ function OnboardingPage() {
 
         <Stepper step={step} />
 
+        {step === 0 && (
+          <div className="mt-2 text-right">
+            <button
+              type="button"
+              onClick={startFresh}
+              className="text-xs text-muted-foreground underline-offset-2 hover:underline"
+            >
+              Start fresh / use a different account
+            </button>
+          </div>
+        )}
+
         <Card className="mt-6 border-border/60 p-5 shadow-sm sm:p-8">
           {step === 0 && (
             <SignupStep
