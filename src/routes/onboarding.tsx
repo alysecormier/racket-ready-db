@@ -101,7 +101,7 @@ function OnboardingPage() {
   // step 4 (lesson selection)
   const [lessons, setLessons] = useState<Lesson[]>([]);
   const [lessonsLoading, setLessonsLoading] = useState(false);
-  const [selectedLessonId, setSelectedLessonId] = useState<string | null>(null);
+  const [lessonCart, setLessonCart] = useState<LessonCartItem[]>([]);
   const [selectedStudentId, setSelectedStudentId] = useState<string | null>(null);
 
   // saved card on file (mock)
