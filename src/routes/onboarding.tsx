@@ -1007,7 +1007,7 @@ function PaymentStep(props: {
 
   const total = items.reduce((sum, { lesson }) => sum + lesson.price, 0);
   const single = items.length === 1 ? items[0] : null;
-  const isMorningMix = single?.lesson.lesson_type === "mens_womens_morning_mix";
+  const isMorningMix = single?.lesson.lesson_type === "adult_morning_mix";
 
   return (
     <div className="space-y-5">
