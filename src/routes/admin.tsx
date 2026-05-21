@@ -12,6 +12,10 @@ import { Card } from "@/components/ui/card";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Calendar } from "@/components/ui/calendar";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "@/components/ui/dialog";
+import {
+  AlertDialog, AlertDialogContent, AlertDialogHeader, AlertDialogTitle,
+  AlertDialogDescription, AlertDialogFooter, AlertDialogCancel, AlertDialogAction,
+} from "@/components/ui/alert-dialog";
 import { Badge } from "@/components/ui/badge";
 import { Textarea } from "@/components/ui/textarea";
 import { Separator } from "@/components/ui/separator";
@@ -19,10 +23,12 @@ import { Label } from "@/components/ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { toast } from "sonner";
 import { Toaster } from "@/components/ui/sonner";
+import { deleteClient as deleteClientFn } from "@/lib/roster.functions";
 import {
   Search, Check, X, Clock, Users, DollarSign, FileSignature,
-  Calendar as CalIcon, ListTodo, Plus, LogOut, CloudRainWind,
+  Calendar as CalIcon, ListTodo, Plus, LogOut, CloudRainWind, Trash2,
 } from "lucide-react";
+
 
 export const Route = createFileRoute("/admin")({
   head: () => ({
@@ -587,11 +593,12 @@ function RosterTab() {
   const [q, setQ] = useState("");
   const [selected, setSelected] = useState<Profile | null>(null);
 
-  useEffect(() => {
-    supabase.from("profiles").select("*").order("full_name").then(({ data }) => {
-      setClients((data ?? []) as Profile[]);
-    });
-  }, []);
+  async function loadClients() {
+    const { data } = await supabase.from("profiles").select("*").order("full_name");
+    setClients((data ?? []) as Profile[]);
+  }
+
+  useEffect(() => { loadClients(); }, []);
 
   const filtered = clients.filter((c) => {
     if (!q.trim()) return true;
@@ -642,7 +649,16 @@ function RosterTab() {
       </Card>
 
       <div>
-        {selected ? <ClientDetail key={selected.id} client={selected} /> : (
+        {selected ? (
+          <ClientDetail
+            key={selected.id}
+            client={selected}
+            onDeleted={async () => {
+              setSelected(null);
+              await loadClients();
+            }}
+          />
+        ) : (
           <Card className="flex h-full min-h-[300px] items-center justify-center p-8 text-sm text-muted-foreground">
             Select a client to view details
           </Card>
@@ -652,12 +668,19 @@ function RosterTab() {
   );
 }
 
-function ClientDetail({ client }: { client: Profile }) {
+
+function ClientDetail({ client, onDeleted }: { client: Profile; onDeleted: () => void | Promise<void> }) {
   const { user } = useAuth();
   const [students, setStudents] = useState<Student[]>([]);
   const [notes, setNotes] = useState<{ id: string; note: string; created_at: string }[]>([]);
   const [draft, setDraft] = useState("");
   const [saving, setSaving] = useState(false);
+  const [clientLessons, setClientLessons] = useState<
+    Array<{ booking: Booking; lesson: Lesson; student: Student | null }>
+  >([]);
+  const [confirmDeleteOpen, setConfirmDeleteOpen] = useState(false);
+  const [deleting, setDeleting] = useState(false);
+  const runDelete = useServerFn(deleteClientFn);
 
   async function loadNotes() {
     const { data } = await supabase
@@ -666,10 +689,34 @@ function ClientDetail({ client }: { client: Profile }) {
     setNotes(data ?? []);
   }
 
+  async function loadLessons(studentsList: Student[]) {
+    const { data: bData } = await supabase
+      .from("bookings").select("*").eq("profile_id", client.id);
+    const bookings = (bData ?? []) as Booking[];
+    if (bookings.length === 0) { setClientLessons([]); return; }
+    const lessonIds = Array.from(new Set(bookings.map((b) => b.lesson_id)));
+    const { data: lData } = await supabase
+      .from("lessons").select("*").in("id", lessonIds);
+    const lMap: Record<string, Lesson> = Object.fromEntries(((lData ?? []) as Lesson[]).map((l) => [l.id, l]));
+    const sMap: Record<string, Student> = Object.fromEntries(studentsList.map((s) => [s.id, s]));
+    const rows = bookings
+      .map((b) => ({
+        booking: b,
+        lesson: lMap[b.lesson_id],
+        student: b.student_id ? (sMap[b.student_id] ?? null) : null,
+      }))
+      .filter((r) => r.lesson)
+      .sort((a, b) => new Date(b.lesson.start_time).getTime() - new Date(a.lesson.start_time).getTime());
+    setClientLessons(rows);
+  }
+
   useEffect(() => {
-    supabase.from("students").select("*").eq("parent_id", client.id)
-      .then(({ data }) => setStudents((data ?? []) as Student[]));
-    loadNotes();
+    (async () => {
+      const { data } = await supabase.from("students").select("*").eq("parent_id", client.id);
+      const studentsList = (data ?? []) as Student[];
+      setStudents(studentsList);
+      await Promise.all([loadNotes(), loadLessons(studentsList)]);
+    })();
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [client.id]);
 
@@ -686,6 +733,21 @@ function ClientDetail({ client }: { client: Profile }) {
     loadNotes();
   }
 
+  async function confirmDelete() {
+    setDeleting(true);
+    try {
+      await runDelete({ data: { clientId: client.id } });
+      toast.success("Client deleted");
+      setConfirmDeleteOpen(false);
+      await onDeleted();
+    } catch (e) {
+      toast.error(e instanceof Error ? e.message : "Delete failed");
+    } finally {
+      setDeleting(false);
+    }
+  }
+
+
   return (
     <Card className="p-5 sm:p-6 space-y-6">
       <div className="flex items-start justify-between gap-4">
@@ -696,19 +758,78 @@ function ClientDetail({ client }: { client: Profile }) {
             <div>{client.phone || "No phone"}</div>
           </div>
         </div>
-        <div className="text-right">
-          <div className="text-xs uppercase tracking-wide text-muted-foreground">Waiver</div>
-          {client.waiver_signed ? (
-            <div className="mt-1 inline-flex items-center gap-1.5 rounded-full bg-primary/15 px-3 py-1 text-sm font-semibold text-primary">
-              <Check className="h-4 w-4" /> Signed
-            </div>
-          ) : (
-            <div className="mt-1 inline-flex items-center gap-1.5 rounded-full bg-destructive/15 px-3 py-1 text-sm font-semibold text-destructive">
-              <X className="h-4 w-4" /> Unsigned
-            </div>
-          )}
+        <div className="flex flex-col items-end gap-2">
+          <div className="text-right">
+            <div className="text-xs uppercase tracking-wide text-muted-foreground">Waiver</div>
+            {client.waiver_signed ? (
+              <div className="mt-1 inline-flex items-center gap-1.5 rounded-full bg-primary/15 px-3 py-1 text-sm font-semibold text-primary">
+                <Check className="h-4 w-4" /> Signed
+              </div>
+            ) : (
+              <div className="mt-1 inline-flex items-center gap-1.5 rounded-full bg-destructive/15 px-3 py-1 text-sm font-semibold text-destructive">
+                <X className="h-4 w-4" /> Unsigned
+              </div>
+            )}
+          </div>
+          <Button
+            variant="destructive"
+            size="sm"
+            onClick={() => setConfirmDeleteOpen(true)}
+            disabled={deleting}
+          >
+            <Trash2 className="mr-2 h-4 w-4" />
+            Delete client
+          </Button>
         </div>
       </div>
+
+      <Separator />
+
+      <section>
+        <h3 className="mb-2 text-sm font-semibold uppercase tracking-wide text-muted-foreground">
+          Signed-up lessons ({clientLessons.length})
+        </h3>
+        {clientLessons.length === 0 ? (
+          <p className="text-sm text-muted-foreground">No bookings yet.</p>
+        ) : (
+          <div className="space-y-2">
+            {clientLessons.map(({ booking, lesson, student }) => {
+              const start = new Date(lesson.start_time);
+              const end = new Date(lesson.end_time);
+              return (
+                <div key={booking.id} className="rounded-lg border border-border bg-secondary/30 p-3">
+                  <div className="flex items-start justify-between gap-3">
+                    <div className="min-w-0">
+                      <div className="font-medium">{lesson.title}</div>
+                      <div className="mt-0.5 flex flex-wrap items-center gap-3 text-xs text-muted-foreground">
+                        <span className="inline-flex items-center gap-1">
+                          <CalIcon className="h-3 w-3" />
+                          {start.toLocaleDateString(undefined, { weekday: "short", month: "short", day: "numeric" })}
+                        </span>
+                        <span className="inline-flex items-center gap-1">
+                          <Clock className="h-3 w-3" />
+                          {fmtTime(lesson.start_time)} – {fmtTime(lesson.end_time)}
+                        </span>
+                        <span className="inline-flex items-center gap-1">
+                          <Users className="h-3 w-3" />
+                          {student?.name ?? "Adult"}
+                        </span>
+                      </div>
+                    </div>
+                    <div className="flex flex-col items-end gap-1">
+                      <PaymentBadge status={booking.payment_status} />
+                      <WaiverBadge signed={booking.signed_waiver || client.waiver_signed} />
+                    </div>
+                  </div>
+                  <span className="sr-only">
+                    Ends {end.toISOString()}
+                  </span>
+                </div>
+              );
+            })}
+          </div>
+        )}
+      </section>
 
       <Separator />
 
@@ -731,6 +852,7 @@ function ClientDetail({ client }: { client: Profile }) {
           </div>
         )}
       </section>
+
 
       <Separator />
 
@@ -763,9 +885,33 @@ function ClientDetail({ client }: { client: Profile }) {
           )}
         </div>
       </section>
+
+      <AlertDialog open={confirmDeleteOpen} onOpenChange={(v) => !deleting && setConfirmDeleteOpen(v)}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Delete this client?</AlertDialogTitle>
+            <AlertDialogDescription>
+              This permanently removes <strong>{client.full_name || client.email || "this client"}</strong>{" "}
+              and all of their bookings, waitlist entries, coach notes, and registered children.
+              This cannot be undone.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel disabled={deleting}>Cancel</AlertDialogCancel>
+            <AlertDialogAction
+              onClick={(e) => { e.preventDefault(); confirmDelete(); }}
+              disabled={deleting}
+              className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
+            >
+              {deleting ? "Deleting…" : "Delete client"}
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
     </Card>
   );
 }
+
 
 /* ----------------------------------------------------------------- WAITLIST */
 
