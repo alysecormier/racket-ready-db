@@ -476,6 +476,13 @@ function OnboardingPage() {
       setFullName(profile.full_name ?? "");
       setPhone(profile.phone ?? "");
       setEmail(profile.email ?? loginEmail.trim());
+      const { first, last } = splitName(profile.full_name ?? "");
+      await persistAccountHolder(userId, {
+        firstName: first,
+        lastName: last,
+        email: profile.email ?? loginEmail.trim(),
+        phone: profile.phone ?? "",
+      });
     }
     toast.success("Signed in. Let's pick lessons.");
     setStep(profile?.waiver_signed ? 1 : 1);
