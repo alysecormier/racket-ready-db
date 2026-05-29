@@ -616,7 +616,7 @@ function OnboardingPage() {
     return { ok: true };
   }
 
-  function handleContinueFromPlayers() {
+  async function handleContinueFromPlayers() {
     if (registrations.length === 0) return;
     setAttemptedContinue(true);
     const v = validateRegistrations();
@@ -625,6 +625,8 @@ function OnboardingPage() {
       toast.error(v.msg);
       return;
     }
+    // Persist any new (non-saved) participants now so admin sees them live
+    await persistAdditionalParticipants();
     setStep(2);
   }
 
