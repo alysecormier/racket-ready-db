@@ -327,7 +327,6 @@ function OnboardingPage() {
     }
     return true;
   }
-  }
 
 
   async function loadSavedParticipants() {
