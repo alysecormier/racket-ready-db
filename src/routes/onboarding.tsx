@@ -1728,12 +1728,14 @@ function PaymentConfirm({
       <div className="flex flex-col-reverse gap-2 sm:flex-row">
         <Button variant="outline" onClick={onBack} className="flex-1 bg-gray-100 hover:bg-gray-200">
           Go Back
-        </Button>
         <Button
           onClick={onConfirm}
+          disabled={saving}
           className="flex-1 bg-green-600 text-white hover:bg-green-700"
         >
-          I've Paid ✓
+          {saving ? "Saving…" : "I've Paid ✓"}
+        </Button>
+
         </Button>
       </div>
     </div>
