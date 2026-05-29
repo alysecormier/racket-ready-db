@@ -873,7 +873,6 @@ function ParticipantCard(props: {
         )}
       </div>
 
-      </div>
 
       {props.invalid && (
         <p className="mt-3 text-xs font-medium text-destructive">
