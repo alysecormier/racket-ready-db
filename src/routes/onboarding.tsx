@@ -124,7 +124,7 @@ function OnboardingPage() {
   // step 1 (players & lessons) — multi-participant cart
   const [registrations, setRegistrations] = useState<Registration[]>([]);
   const [scrollToRegId, setScrollToRegId] = useState<string | null>(null);
-  const [invalidRegId, setInvalidRegId] = useState<string | null>(null);
+  const [attemptedContinue, setAttemptedContinue] = useState(false);
 
   // step 2 (waiver)
   const [agreed, setAgreed] = useState(false);
