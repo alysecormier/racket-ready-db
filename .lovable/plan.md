@@ -1,59 +1,75 @@
-# Plan
+# Data Persistence + Saved Participants + Real-Time Admin
 
-## 1. Strip the mock "john@test.com" path
-- **Delete** `src/lib/mock-client.functions.ts` (the `simulateReturningClient` and `payWithSavedCard` server fns).
-- **`src/routes/admin.tsx`**: remove the "Simulate returning client" card + the import.
-- **`src/routes/onboarding.tsx`**:
-  - Remove `payWithSavedCard` import and the "Pay with saved card on file" branch in `PaymentStep`. Everyone goes through real Stripe Checkout.
-  - Keep the existing `supabase.auth.getUser()` gate; nothing else auto-logs anyone in. I'll also add an explicit redirect to `/login` if step >= 3 and no session.
-- Nothing in the codebase actually hard-codes auto-sign-in to `john@test.com` — the only thing tied to that email is the seeding helper above. If you also want me to **delete the seeded `john@test.com` auth user** from the database, say the word and I'll run it.
+This is a large multi-part change. I'll ship it in 4 focused phases so each one is verifiable before the next.
 
-## 2. Monthly calendar in onboarding Step 4
-- Replace `CalendarView` (currently a single Mon–Sun strip) with a real month grid:
-  - Header with **‹ Month YYYY ›** prev/next buttons (no upper bound, so user can page to Jun/Jul/Aug 2026).
-  - 7-column day grid for the visible month, each cell shows the day number + up to N lesson chips (time + title + price + capacity), with "+X more" overflow.
-  - Clicking a chip selects that lesson (same `setSelectedLessonId` flow as today). Full slots show "Join waitlist".
-  - Mobile: keep horizontal scroll wrapper so the 420px viewport still works.
-- List view stays as a fallback toggle.
+## Phase 1 — Database schema (Supabase migration)
 
-## 3. Lesson type presets + match-play opt-in
-**DB migration:**
-- `lessons.lesson_type text` (nullable) — one of `mens_womens_morning_mix`, `camp_3_6`, `camp_7_10`, `camp_11_14`, or `null` for legacy/custom.
-- `bookings.stay_for_match_play boolean default false`.
-- Trigger update: allow users to set `stay_for_match_play` on their own bookings (the existing `guard_bookings_payment_fields` trigger is OK because that field isn't in the guarded list; I'll just confirm).
+New tables (with GRANTs + RLS):
 
-**Admin (`/admin` session creator):**
-- Add a "Preset" dropdown above the manual fields. Selecting a preset prefills title, start/end time (date picker stays manual), price, capacity, and stores `lesson_type`.
-- Morning Mix price is a flexible field with default $35, hint "$35–$40".
+- **accounts** — mirrors auth user; `id` defaults to `auth.uid()`; `account_status`, `deposit_status`.
+- **participants** — `account_id` FK → accounts, `participant_type` ('adult'|'junior'), `is_account_holder`, `is_saved` (boolean default true, for soft-delete), `age`, `gender`.
+- **lesson_bookings** — `account_id`, `participant_id`, `lesson_id` (text), `lesson_name`, `lesson_date`, `lesson_start_time`, `lesson_end_time`, `lesson_price`, `deposit_amount`, `deposit_status`, `payment_method`, `payment_reported_at`, `cancellation_status`, `cancellation_requested_at`, `policy_acknowledged`, `policy_acknowledged_at`.
+- **email_log** — `account_id`, `participant_id?`, `lesson_booking_id?`, `email_type`, `sent_to`, `subject`, `status`.
 
-**Client booking UI:**
-- In `PaymentStep`, if `lesson.lesson_type === 'mens_womens_morning_mix'`, show a checkbox: **"Staying after for organized match play?"**. Persisted to `bookings.stay_for_match_play` on creation (passed through Stripe Checkout metadata → webhook insert).
-- In the lesson detail panel on Step 4, if the selected lesson is the Morning Mix, fetch and show the list of *first names* of other adults in that slot who opted into match play (via a new server fn that returns names only — no email/phone leakage).
+RLS:
+- Clients: read/write only rows where `account_id = auth.uid()`.
+- Coaches (`has_role(auth.uid(),'coach')`): full read/write all rows.
 
-## 4. Weather cancellation
-**Server fn `cancelLessonForWeather(lessonId)`** (coach-only, in `src/lib/cancel.functions.ts`):
-- Verify caller has `coach` role.
-- Load all active bookings for that lesson with profile phone + payment intent + price.
-- For each booking:
-  - Issue full Stripe refund via `stripe.refunds.create({ payment_intent })` (using `createStripeClient` — gateway).
-  - Update booking to `cancellation_status='canceled'`, `payment_status='refunded'`, `canceled_at=now()` (via admin client, bypasses trigger).
-  - Send Twilio SMS: *"Notice from Alyse's Tennis Camp: Today's session has been canceled due to rain. A full refund has been initiated back to your card."*
-- Return per-booking outcomes; surface failures in a toast.
+Enable `supabase_realtime` publication on `lesson_bookings` and `accounts`.
 
-**Admin UI (`/admin` coach calendar):**
-- Add a `CloudRainOff` icon button next to each scheduled lesson row, labeled "Cancel due to weather". Confirmation dialog → calls the server fn → toast results.
+Note: existing `profiles`, `students`, `bookings` tables stay untouched — the new flow uses the new tables so we don't break anything already wired.
 
-## Out of scope (flag for follow-up unless you say otherwise)
-- I will not build a brand-new "Coach Calendar" view if `/admin` doesn't already render lessons in a list; I'll add the button to whatever list is already there. If `/admin` has no per-lesson row yet, I'll add a minimal upcoming-lessons list to host the button.
-- I won't change the existing 24h cancellation policy / penalty logic — weather cancel is its own path that always refunds 100%.
+## Phase 2 — Write path (onboarding)
 
-## Tech notes
-- The webhook (`src/routes/api/public/payments/webhook.ts`) needs to read `stay_for_match_play` from Checkout session metadata and write it on booking insert.
-- New "match play roster" server fn returns `{ firstName: string }[]` only.
-- Real Stripe Checkout is already wired via `createLessonBookingCheckout` — removing the mock card path just means everyone routes through that.
+In `src/routes/onboarding.tsx`:
 
----
+- Step 1 complete → upsert `accounts` row + `participants` row (`is_account_holder=true`).
+- Step 2 Continue → insert participants for each added adult/child, store returned IDs on the in-memory registrations.
+- "I've Paid" click → insert `lesson_bookings` rows for every selected lesson per participant with `deposit_status='Pending'`, payment method, `payment_reported_at=now()`, `policy_acknowledged=true`.
+- On page load for logged-in client: fetch saved participants where `account_id=auth.uid() AND is_saved=true` and pre-populate.
 
-**Two quick confirms before I build:**
-1. OK to **delete** the mock test path entirely (server fn + admin button + saved-card pay branch)? Or do you want to keep `payWithSavedCard` for real returning customers who later have a real saved card?
-2. For the match-play social view — show **first names only** (privacy-safe default), or full names?
+## Phase 3 — Saved Participants UI + Client Dashboard
+
+In Step 2:
+- New "Saved Participants" section between account-holder card and Add buttons.
+- Cards with emoji by gender (👦/👧/🧒/👤), "+ Register for a Lesson" expands a lesson selector inline, "Edit" updates the participant row, "Remove" soft-deletes (`is_saved=false`).
+
+New client home (post-login, in `src/routes/index.tsx` or a new `/dashboard` route):
+- "Your Upcoming Lessons" cards from `lesson_bookings` where `lesson_date >= today AND cancellation_status='Active'`.
+- Per-card "Add to Cal" (.ics) and "Cancel Lesson" (24h check, updates row + flips `account_status='Deposit Required'` on late cancel).
+
+## Phase 4 — Admin dashboard live data + Realtime
+
+In `src/routes/admin.tsx`:
+
+- Lessons view: query `lesson_bookings` join `participants` + `accounts`, sorted `created_at desc`.
+- Columns: account holder, participant, type, lesson name, date/time, price, deposit status, cancellation status, payment method, registered at.
+- Search bar (name / date) + filter dropdowns (deposit status, cancellation status, lesson date).
+- Action Required: counts from `lesson_bookings.deposit_status='Pending'` and `accounts.account_status='Deposit Required'`.
+- Confirm Deposit → update row + log email (email send wiring stays a follow-up; row write happens now).
+- Mark as No-Show → update booking (`cancellation_status='No-Show'`, `deposit_status='Forfeited'`) + flip account `account_status='Deposit Required'`.
+- Auto-refresh every 60s + manual Refresh button.
+- Supabase Realtime subscription on `lesson_bookings` and `accounts` → invalidate queries + toast `🎾 New registration — {name} {lesson} · {date}`.
+
+## What I will NOT touch
+
+- Existing lesson card / calendar / week view visuals
+- Green color scheme & Tailwind
+- Active-week admin control (already shipped)
+- Stripe / Twilio (none added)
+- Resend email send wiring (deferred — `email_log` rows are written but the actual send is a separate follow-up; let me know if you want it in this pass)
+
+## Technical details
+
+- Account row uses `id = auth.uid()` so no extra mapping table.
+- Writes go through `supabase` client directly under RLS; no server fns needed for the basic CRUD (keeps it simple and live).
+- Realtime: `supabase.channel('admin').on('postgres_changes', ...)` subscribed inside admin component, cleaned up on unmount.
+- `useQuery` + `refetchInterval: 60_000` for the 60s auto-refresh; invalidation triggered on realtime events.
+
+## Deliverable order
+
+1. Run migration (Phase 1) — needs your approval.
+2. After migration approved: write code for Phases 2–4 in one pass.
+3. You verify by registering as a test client + viewing admin.
+
+Confirm and I'll send the migration.

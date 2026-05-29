@@ -14,6 +14,39 @@ export type Database = {
   }
   public: {
     Tables: {
+      accounts: {
+        Row: {
+          account_status: string
+          created_at: string
+          deposit_status: string
+          email: string | null
+          first_name: string | null
+          id: string
+          last_name: string | null
+          phone: string | null
+        }
+        Insert: {
+          account_status?: string
+          created_at?: string
+          deposit_status?: string
+          email?: string | null
+          first_name?: string | null
+          id: string
+          last_name?: string | null
+          phone?: string | null
+        }
+        Update: {
+          account_status?: string
+          created_at?: string
+          deposit_status?: string
+          email?: string | null
+          first_name?: string | null
+          id?: string
+          last_name?: string | null
+          phone?: string | null
+        }
+        Relationships: []
+      }
       app_settings: {
         Row: {
           key: string
@@ -144,6 +177,142 @@ export type Database = {
           },
         ]
       }
+      email_log: {
+        Row: {
+          account_id: string
+          email_type: string
+          id: string
+          lesson_booking_id: string | null
+          participant_id: string | null
+          sent_at: string
+          sent_to: string
+          status: string
+          subject: string
+        }
+        Insert: {
+          account_id: string
+          email_type: string
+          id?: string
+          lesson_booking_id?: string | null
+          participant_id?: string | null
+          sent_at?: string
+          sent_to: string
+          status?: string
+          subject: string
+        }
+        Update: {
+          account_id?: string
+          email_type?: string
+          id?: string
+          lesson_booking_id?: string | null
+          participant_id?: string | null
+          sent_at?: string
+          sent_to?: string
+          status?: string
+          subject?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "email_log_account_id_fkey"
+            columns: ["account_id"]
+            isOneToOne: false
+            referencedRelation: "accounts"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "email_log_lesson_booking_id_fkey"
+            columns: ["lesson_booking_id"]
+            isOneToOne: false
+            referencedRelation: "lesson_bookings"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "email_log_participant_id_fkey"
+            columns: ["participant_id"]
+            isOneToOne: false
+            referencedRelation: "participants"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      lesson_bookings: {
+        Row: {
+          account_id: string
+          cancellation_requested_at: string | null
+          cancellation_status: string
+          created_at: string
+          deposit_amount: number
+          deposit_status: string
+          id: string
+          lesson_date: string
+          lesson_end_time: string | null
+          lesson_id: string
+          lesson_name: string
+          lesson_price: number
+          lesson_start_time: string | null
+          participant_id: string
+          payment_method: string | null
+          payment_reported_at: string | null
+          policy_acknowledged: boolean
+          policy_acknowledged_at: string | null
+        }
+        Insert: {
+          account_id: string
+          cancellation_requested_at?: string | null
+          cancellation_status?: string
+          created_at?: string
+          deposit_amount?: number
+          deposit_status?: string
+          id?: string
+          lesson_date: string
+          lesson_end_time?: string | null
+          lesson_id: string
+          lesson_name: string
+          lesson_price?: number
+          lesson_start_time?: string | null
+          participant_id: string
+          payment_method?: string | null
+          payment_reported_at?: string | null
+          policy_acknowledged?: boolean
+          policy_acknowledged_at?: string | null
+        }
+        Update: {
+          account_id?: string
+          cancellation_requested_at?: string | null
+          cancellation_status?: string
+          created_at?: string
+          deposit_amount?: number
+          deposit_status?: string
+          id?: string
+          lesson_date?: string
+          lesson_end_time?: string | null
+          lesson_id?: string
+          lesson_name?: string
+          lesson_price?: number
+          lesson_start_time?: string | null
+          participant_id?: string
+          payment_method?: string | null
+          payment_reported_at?: string | null
+          policy_acknowledged?: boolean
+          policy_acknowledged_at?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "lesson_bookings_account_id_fkey"
+            columns: ["account_id"]
+            isOneToOne: false
+            referencedRelation: "accounts"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "lesson_bookings_participant_id_fkey"
+            columns: ["participant_id"]
+            isOneToOne: false
+            referencedRelation: "participants"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       lessons: {
         Row: {
           capacity: number
@@ -179,6 +348,53 @@ export type Database = {
           updated_at?: string
         }
         Relationships: []
+      }
+      participants: {
+        Row: {
+          account_id: string
+          age: number | null
+          created_at: string
+          first_name: string
+          gender: string | null
+          id: string
+          is_account_holder: boolean
+          is_saved: boolean
+          last_name: string
+          participant_type: string
+        }
+        Insert: {
+          account_id: string
+          age?: number | null
+          created_at?: string
+          first_name: string
+          gender?: string | null
+          id?: string
+          is_account_holder?: boolean
+          is_saved?: boolean
+          last_name: string
+          participant_type: string
+        }
+        Update: {
+          account_id?: string
+          age?: number | null
+          created_at?: string
+          first_name?: string
+          gender?: string | null
+          id?: string
+          is_account_holder?: boolean
+          is_saved?: boolean
+          last_name?: string
+          participant_type?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "participants_account_id_fkey"
+            columns: ["account_id"]
+            isOneToOne: false
+            referencedRelation: "accounts"
+            referencedColumns: ["id"]
+          },
+        ]
       }
       profiles: {
         Row: {
