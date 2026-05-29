@@ -24,7 +24,7 @@ export const Route = createFileRoute("/onboarding")({
       { title: "Get Started — Ace Tennis Academy" },
       { name: "description", content: "Join Ace Tennis Academy in a few simple steps." },
     ],
-  }),
+      { name: "description", content: "Welcome to 2026 Tennis Lessons — register in a few simple steps." },
   component: OnboardingPage,
 });
 
