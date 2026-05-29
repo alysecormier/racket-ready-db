@@ -821,7 +821,7 @@ function ParticipantCard(props: {
           )}
         </div>
       )}
-      {/* Lesson selector — card/tile picker */}
+      {/* Lesson selector — week + calendar browser */}
       <div className="mt-3 space-y-2">
         <Label>Lesson *</Label>
         {props.lessonsLoading ? (
@@ -829,42 +829,12 @@ function ParticipantCard(props: {
         ) : props.lessons.length === 0 ? (
           <p className="text-xs text-muted-foreground">No lessons available.</p>
         ) : (
-          <div className="grid gap-2 sm:grid-cols-2">
-            {props.lessons.map((l) => {
-              const isFull = l.booked >= l.capacity;
-              const isSelected = reg.lessonId === l.id;
-              const d = new Date(l.start_time);
-              const e = new Date(l.end_time);
-              const day = d.toLocaleDateString(undefined, { weekday: "long" });
-              const date = d.toLocaleDateString(undefined, { month: "short", day: "numeric", year: "numeric" });
-              const timeRange = `${d.toLocaleTimeString(undefined, { hour: "numeric", minute: "2-digit" })}–${e.toLocaleTimeString(undefined, { hour: "numeric", minute: "2-digit" })}`;
-              return (
-                <button
-                  key={l.id}
-                  type="button"
-                  disabled={isFull && !isSelected}
-                  onClick={() => props.setRegLesson(reg.id, l.id)}
-                  className={`relative text-left rounded-lg border-2 p-3 transition-all ${
-                    isSelected
-                      ? "border-green-600 bg-green-50 dark:bg-green-950/30 ring-2 ring-green-600/30"
-                      : isFull
-                      ? "border-border bg-muted/40 opacity-60 cursor-not-allowed"
-                      : "border-border bg-background hover:border-primary/60 hover:bg-secondary/40"
-                  }`}
-                >
-                  {isSelected && (
-                    <span className="absolute right-2 top-2 inline-flex h-5 w-5 items-center justify-center rounded-full bg-green-600 text-white">
-                      <Check className="h-3.5 w-3.5" />
-                    </span>
-                  )}
-                  <div className="text-sm font-semibold pr-6">{l.title}</div>
-                  <div className="mt-0.5 text-xs text-muted-foreground">{day} · {date}</div>
-                  <div className="text-xs text-muted-foreground">{timeRange}</div>
-                  <div className="mt-1 text-sm font-semibold text-foreground">${Number(l.price).toFixed(0)}{isFull ? " · FULL" : ""}</div>
-                </button>
-              );
-            })}
-          </div>
+          <LessonBrowser
+            lessons={props.lessons}
+            selectedId={reg.lessonId}
+            onSelect={(id) => props.setRegLesson(reg.id, id)}
+            onClear={() => props.setRegLesson(reg.id, "")}
+          />
         )}
         {reg.lessonId && (
           <p className="text-[11px] text-muted-foreground">
@@ -872,6 +842,7 @@ function ParticipantCard(props: {
           </p>
         )}
       </div>
+
 
 
       {props.invalid && (
@@ -1372,3 +1343,378 @@ function NavRow({ onBack, onNext, loading, nextLabel, disabled }: { onBack: () =
     </div>
   );
 }
+
+// ============== Lesson Browser (Week + Calendar) ==============
+
+function startOfWeek(d: Date): Date {
+  const x = new Date(d.getFullYear(), d.getMonth(), d.getDate());
+  x.setDate(x.getDate() - x.getDay());
+  return x;
+}
+function addDays(d: Date, n: number): Date {
+  const x = new Date(d);
+  x.setDate(x.getDate() + n);
+  return x;
+}
+function sameDay(a: Date, b: Date): boolean {
+  return a.getFullYear() === b.getFullYear() && a.getMonth() === b.getMonth() && a.getDate() === b.getDate();
+}
+function fmtWeekRange(start: Date): string {
+  const end = addDays(start, 6);
+  const sameMonth = start.getMonth() === end.getMonth();
+  const s = start.toLocaleDateString(undefined, { month: "short", day: "numeric" });
+  const e = end.toLocaleDateString(undefined, sameMonth ? { day: "numeric" } : { month: "short", day: "numeric" });
+  return `Week of ${s} – ${e}`;
+}
+
+function LessonBrowser(props: {
+  lessons: Lesson[];
+  selectedId: string;
+  onSelect: (id: string) => void;
+  onClear: () => void;
+}) {
+  const { lessons, selectedId, onSelect, onClear } = props;
+  const [view, setView] = useState<"week" | "calendar">("week");
+
+  // Distinct sorted week starts that contain lessons
+  const weekStarts = useMemo(() => {
+    const set = new Map<number, Date>();
+    for (const l of lessons) {
+      const ws = startOfWeek(new Date(l.start_time));
+      set.set(ws.getTime(), ws);
+    }
+    return Array.from(set.values()).sort((a, b) => a.getTime() - b.getTime());
+  }, [lessons]);
+
+  // Initial week index: containing today, else first available
+  const initialIdx = useMemo(() => {
+    const todayWeek = startOfWeek(new Date()).getTime();
+    const idx = weekStarts.findIndex((w) => w.getTime() >= todayWeek);
+    return idx === -1 ? Math.max(0, weekStarts.length - 1) : idx;
+  }, [weekStarts]);
+  const [weekIdx, setWeekIdx] = useState<number>(initialIdx);
+  useEffect(() => { setWeekIdx(initialIdx); }, [initialIdx]);
+
+  // Calendar state
+  const initialMonth = useMemo(() => {
+    const first = lessons[0] ? new Date(lessons[0].start_time) : new Date();
+    return new Date(first.getFullYear(), first.getMonth(), 1);
+  }, [lessons]);
+  const [calMonth, setCalMonth] = useState<Date>(initialMonth);
+  const [selectedDay, setSelectedDay] = useState<Date | null>(null);
+
+  const selectedLesson = lessons.find((l) => l.id === selectedId);
+
+  // Selected confirmation line
+  if (selectedLesson) {
+    const d = new Date(selectedLesson.start_time);
+    const e = new Date(selectedLesson.end_time);
+    const dateStr = d.toLocaleDateString(undefined, { weekday: "short", month: "short", day: "numeric" });
+    const timeRange = `${d.toLocaleTimeString(undefined, { hour: "numeric", minute: "2-digit" })}–${e.toLocaleTimeString(undefined, { hour: "numeric", minute: "2-digit" })}`;
+    return (
+      <div className="rounded-lg border-2 border-green-600 bg-green-50 dark:bg-green-950/30 p-3">
+        <div className="flex items-start gap-2">
+          <Check className="h-4 w-4 mt-0.5 flex-shrink-0 text-green-700 dark:text-green-400" />
+          <div className="flex-1 text-sm">
+            <span className="font-medium text-foreground">Selected:</span>{" "}
+            <span className="text-foreground">{selectedLesson.title}</span>
+            <span className="text-muted-foreground"> · {dateStr} · {timeRange} · ${Number(selectedLesson.price).toFixed(0)}</span>
+          </div>
+          <button
+            type="button"
+            onClick={onClear}
+            className="text-xs font-medium text-green-700 dark:text-green-400 hover:underline"
+          >
+            Change
+          </button>
+        </div>
+      </div>
+    );
+  }
+
+  return (
+    <div className="space-y-3">
+      {/* View toggle */}
+      <div className="inline-flex rounded-md border border-border bg-secondary/30 p-0.5 text-xs">
+        <button
+          type="button"
+          onClick={() => setView("week")}
+          className={`px-2.5 py-1 rounded ${view === "week" ? "bg-background shadow-sm font-medium" : "text-muted-foreground"}`}
+        >
+          ← Week View →
+        </button>
+        <button
+          type="button"
+          onClick={() => setView("calendar")}
+          className={`px-2.5 py-1 rounded ${view === "calendar" ? "bg-background shadow-sm font-medium" : "text-muted-foreground"}`}
+        >
+          📅 Calendar
+        </button>
+      </div>
+
+      {view === "week"
+        ? <WeekView
+            lessons={lessons}
+            weekStarts={weekStarts}
+            weekIdx={weekIdx}
+            setWeekIdx={setWeekIdx}
+            selectedId={selectedId}
+            onSelect={onSelect}
+          />
+        : <CalendarView
+            lessons={lessons}
+            calMonth={calMonth}
+            setCalMonth={setCalMonth}
+            selectedDay={selectedDay}
+            setSelectedDay={setSelectedDay}
+            selectedId={selectedId}
+            onSelect={onSelect}
+          />}
+    </div>
+  );
+}
+
+function LessonCard(props: { lesson: Lesson; selected: boolean; onSelect: (id: string) => void }) {
+  const l = props.lesson;
+  const isFull = l.booked >= l.capacity;
+  const d = new Date(l.start_time);
+  const e = new Date(l.end_time);
+  const day = d.toLocaleDateString(undefined, { weekday: "long" });
+  const date = d.toLocaleDateString(undefined, { month: "short", day: "numeric", year: "numeric" });
+  const timeRange = `${d.toLocaleTimeString(undefined, { hour: "numeric", minute: "2-digit" })}–${e.toLocaleTimeString(undefined, { hour: "numeric", minute: "2-digit" })}`;
+  return (
+    <button
+      type="button"
+      disabled={isFull && !props.selected}
+      onClick={() => props.onSelect(l.id)}
+      className={`relative text-left rounded-lg border-2 p-3 transition-all ${
+        props.selected
+          ? "border-green-600 bg-green-50 dark:bg-green-950/30 ring-2 ring-green-600/30"
+          : isFull
+          ? "border-border bg-muted/40 opacity-60 cursor-not-allowed"
+          : "border-border bg-background hover:border-primary/60 hover:bg-secondary/40"
+      }`}
+    >
+      {props.selected && (
+        <span className="absolute right-2 top-2 inline-flex h-5 w-5 items-center justify-center rounded-full bg-green-600 text-white">
+          <Check className="h-3.5 w-3.5" />
+        </span>
+      )}
+      <div className="text-sm font-semibold pr-6">{l.title}</div>
+      <div className="mt-0.5 text-xs text-muted-foreground">{day} · {date}</div>
+      <div className="text-xs text-muted-foreground">{timeRange}</div>
+      <div className="mt-1 text-sm font-semibold text-foreground">${Number(l.price).toFixed(0)}{isFull ? " · FULL" : ""}</div>
+    </button>
+  );
+}
+
+function WeekView(props: {
+  lessons: Lesson[];
+  weekStarts: Date[];
+  weekIdx: number;
+  setWeekIdx: (n: number) => void;
+  selectedId: string;
+  onSelect: (id: string) => void;
+}) {
+  const { lessons, weekStarts, weekIdx, setWeekIdx } = props;
+  if (weekStarts.length === 0) return null;
+  const safeIdx = Math.min(Math.max(weekIdx, 0), weekStarts.length - 1);
+  const currentStart = weekStarts[safeIdx];
+  const currentEnd = addDays(currentStart, 7);
+  const weekLessons = lessons
+    .filter((l) => {
+      const t = new Date(l.start_time).getTime();
+      return t >= currentStart.getTime() && t < currentEnd.getTime();
+    })
+    .sort((a, b) => new Date(a.start_time).getTime() - new Date(b.start_time).getTime());
+
+  const canPrev = safeIdx > 0;
+  const canNext = safeIdx < weekStarts.length - 1;
+
+  // Swipe support
+  const touchX = useRef<number | null>(null);
+  function onTouchStart(e: React.TouchEvent) { touchX.current = e.touches[0].clientX; }
+  function onTouchEnd(e: React.TouchEvent) {
+    if (touchX.current == null) return;
+    const dx = e.changedTouches[0].clientX - touchX.current;
+    if (dx > 50 && canPrev) setWeekIdx(safeIdx - 1);
+    else if (dx < -50 && canNext) setWeekIdx(safeIdx + 1);
+    touchX.current = null;
+  }
+
+  return (
+    <div className="space-y-2">
+      <div className="flex items-center justify-between gap-2 rounded-md border border-border bg-secondary/30 px-2 py-1.5">
+        <button
+          type="button"
+          disabled={!canPrev}
+          onClick={() => setWeekIdx(safeIdx - 1)}
+          className="px-2 py-1 text-xs font-medium text-foreground hover:bg-background rounded disabled:opacity-40 disabled:cursor-not-allowed"
+        >
+          ← prev
+        </button>
+        <div className="text-xs font-medium text-foreground">{fmtWeekRange(currentStart)}</div>
+        <button
+          type="button"
+          disabled={!canNext}
+          onClick={() => setWeekIdx(safeIdx + 1)}
+          className="px-2 py-1 text-xs font-medium text-foreground hover:bg-background rounded disabled:opacity-40 disabled:cursor-not-allowed"
+        >
+          next →
+        </button>
+      </div>
+
+      <div onTouchStart={onTouchStart} onTouchEnd={onTouchEnd}>
+        {weekLessons.length === 0 ? (
+          <p className="rounded-md border border-dashed border-border p-4 text-center text-xs text-muted-foreground">
+            No lessons available this week.
+          </p>
+        ) : (
+          <div className="grid gap-2 sm:grid-cols-2">
+            {weekLessons.map((l) => (
+              <LessonCard key={l.id} lesson={l} selected={props.selectedId === l.id} onSelect={props.onSelect} />
+            ))}
+          </div>
+        )}
+      </div>
+    </div>
+  );
+}
+
+function CalendarView(props: {
+  lessons: Lesson[];
+  calMonth: Date;
+  setCalMonth: (d: Date) => void;
+  selectedDay: Date | null;
+  setSelectedDay: (d: Date | null) => void;
+  selectedId: string;
+  onSelect: (id: string) => void;
+}) {
+  const { lessons, calMonth, setCalMonth, selectedDay, setSelectedDay } = props;
+
+  // Days in month with lessons
+  const lessonsByDay = useMemo(() => {
+    const map = new Map<string, Lesson[]>();
+    for (const l of lessons) {
+      const d = new Date(l.start_time);
+      const key = `${d.getFullYear()}-${d.getMonth()}-${d.getDate()}`;
+      const arr = map.get(key) ?? [];
+      arr.push(l);
+      map.set(key, arr);
+    }
+    return map;
+  }, [lessons]);
+
+  const monthLabel = calMonth.toLocaleDateString(undefined, { month: "long", year: "numeric" });
+  const firstDay = new Date(calMonth.getFullYear(), calMonth.getMonth(), 1);
+  const daysInMonth = new Date(calMonth.getFullYear(), calMonth.getMonth() + 1, 0).getDate();
+  const gridStart = addDays(firstDay, -firstDay.getDay());
+
+  // Disable left arrow if no earlier lessons exist
+  const earliest = useMemo(() => {
+    if (lessons.length === 0) return null;
+    return lessons.reduce((min, l) => {
+      const t = new Date(l.start_time);
+      return t < min ? t : min;
+    }, new Date(lessons[0].start_time));
+  }, [lessons]);
+  const canPrevMonth = earliest
+    ? new Date(earliest.getFullYear(), earliest.getMonth(), 1) < calMonth
+    : false;
+
+  function shiftMonth(delta: number) {
+    setSelectedDay(null);
+    setCalMonth(new Date(calMonth.getFullYear(), calMonth.getMonth() + delta, 1));
+  }
+
+  function dayLessons(d: Date): Lesson[] {
+    return lessonsByDay.get(`${d.getFullYear()}-${d.getMonth()}-${d.getDate()}`) ?? [];
+  }
+
+  function handleDayClick(d: Date) {
+    const lns = dayLessons(d);
+    if (lns.length === 0) return;
+    setSelectedDay(d);
+    if (lns.length === 1) {
+      props.onSelect(lns[0].id);
+    }
+  }
+
+  const weekdays = ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"];
+  const cells: Date[] = [];
+  for (let i = 0; i < 42; i++) cells.push(addDays(gridStart, i));
+
+  const selectedLessons = selectedDay ? dayLessons(selectedDay) : [];
+
+  return (
+    <div className="space-y-3">
+      <div className="flex items-center justify-between gap-2 rounded-md border border-border bg-secondary/30 px-2 py-1.5">
+        <button
+          type="button"
+          disabled={!canPrevMonth}
+          onClick={() => shiftMonth(-1)}
+          className="px-2 py-1 text-xs font-medium hover:bg-background rounded disabled:opacity-40 disabled:cursor-not-allowed"
+        >
+          ←
+        </button>
+        <div className="text-xs font-medium">{monthLabel}</div>
+        <button
+          type="button"
+          onClick={() => shiftMonth(1)}
+          className="px-2 py-1 text-xs font-medium hover:bg-background rounded"
+        >
+          →
+        </button>
+      </div>
+
+      <div className="rounded-md border border-border p-2">
+        <div className="grid grid-cols-7 gap-1 text-center text-[10px] font-medium text-muted-foreground">
+          {weekdays.map((w) => <div key={w} className="py-1">{w}</div>)}
+        </div>
+        <div className="grid grid-cols-7 gap-1">
+          {cells.map((d, i) => {
+            const inMonth = d.getMonth() === calMonth.getMonth();
+            const lns = dayLessons(d);
+            const hasLessons = lns.length > 0 && inMonth;
+            const isSelected = selectedDay && sameDay(d, selectedDay);
+            return (
+              <button
+                key={i}
+                type="button"
+                disabled={!hasLessons}
+                onClick={() => handleDayClick(d)}
+                className={`relative aspect-square flex items-center justify-center text-xs rounded transition-colors ${
+                  !inMonth ? "text-muted-foreground/30" :
+                  !hasLessons ? "text-muted-foreground/50 cursor-not-allowed" :
+                  isSelected ? "bg-green-600 text-white font-semibold" :
+                  "text-foreground hover:bg-secondary"
+                }`}
+              >
+                {d.getDate()}
+                {hasLessons && !isSelected && (
+                  <span className="absolute bottom-1 left-1/2 -translate-x-1/2 h-1 w-1 rounded-full bg-green-600" />
+                )}
+              </button>
+            );
+          })}
+        </div>
+      </div>
+
+      {selectedDay && (
+        <div className="animate-in slide-in-from-top-2 fade-in-50 space-y-2">
+          <div className="text-xs font-medium text-muted-foreground">
+            Lessons on {selectedDay.toLocaleDateString(undefined, { weekday: "long", month: "short", day: "numeric" })}
+          </div>
+          <div className="grid gap-2 sm:grid-cols-2">
+            {selectedLessons.map((l) => (
+              <LessonCard key={l.id} lesson={l} selected={props.selectedId === l.id} onSelect={props.onSelect} />
+            ))}
+          </div>
+        </div>
+      )}
+
+      {daysInMonth === 0 && null}
+    </div>
+  );
+}
+
