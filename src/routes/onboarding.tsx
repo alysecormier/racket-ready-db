@@ -438,6 +438,13 @@ function OnboardingPage() {
         .from("profiles")
         .update({ full_name: parsed.data.fullName, phone: parsed.data.phone, email: parsed.data.email })
         .eq("id", user.id);
+      const { first, last } = splitName(parsed.data.fullName);
+      await persistAccountHolder(user.id, {
+        firstName: first,
+        lastName: last,
+        email: parsed.data.email,
+        phone: parsed.data.phone,
+      });
     }
     setLoading(false);
     setStep(1);
