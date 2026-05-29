@@ -12,8 +12,6 @@ import { z } from "zod";
 import { CheckCircle2, AlertTriangle, Plus, Trash2, CalendarDays, Users, DollarSign, LayoutGrid, CalendarRange } from "lucide-react";
 import { ToggleGroup, ToggleGroupItem } from "@/components/ui/toggle-group";
 import { Badge } from "@/components/ui/badge";
-import { LessonCheckout } from "@/components/LessonCheckout";
-import { PaymentTestModeBanner } from "@/components/PaymentTestModeBanner";
 import { useServerFn } from "@tanstack/react-start";
 import { signWaiver } from "@/lib/waiver.functions";
 import { getMatchPlayRoster } from "@/lib/match-play.functions";
@@ -23,8 +21,8 @@ import { ChevronLeft, ChevronRight } from "lucide-react";
 export const Route = createFileRoute("/onboarding")({
   head: () => ({
     meta: [
-      { title: "Get Started — Ace Tennis Academy" },
-      { name: "description", content: "Join Ace Tennis Academy in a few simple steps." },
+      { title: "Welcome to 2026 Tennis Lessons" },
+      { name: "description", content: "Welcome to 2026 Tennis Lessons — register in a few simple steps." },
     ],
   }),
   component: OnboardingPage,
@@ -350,14 +348,13 @@ function OnboardingPage() {
 
   return (
     <div className="min-h-screen bg-gradient-to-br from-background via-secondary/30 to-background">
-      <PaymentTestModeBanner />
       <Toaster richColors position="top-center" />
       <div className="mx-auto max-w-2xl px-4 py-8 sm:py-12">
         <header className="mb-8 text-center">
           <div className="mb-3 inline-flex h-12 w-12 items-center justify-center rounded-full bg-primary text-primary-foreground shadow-lg">
             <span className="text-2xl">🎾</span>
           </div>
-          <h1 className="text-2xl font-bold tracking-tight sm:text-3xl">Join Ace Tennis Academy</h1>
+          <h1 className="text-2xl font-bold tracking-tight sm:text-3xl">Welcome to 2026 Tennis Lessons</h1>
           <p className="mt-1 text-sm text-muted-foreground">Get court-ready in a few quick steps</p>
         </header>
 
@@ -996,6 +993,7 @@ function PaymentStep(props: {
   const navigate = useNavigate();
   const [paid, setPaid] = useState(false);
   const [stayForMatchPlay, setStayForMatchPlay] = useState(false);
+  const [selectedMethod, setSelectedMethod] = useState<PaymentMethod | null>(null);
 
   const items = props.lessonCart
     .map((item) => {
@@ -1077,27 +1075,25 @@ function PaymentStep(props: {
       </div>
 
       {paid ? (
-        <div className="rounded-lg border border-primary/40 bg-primary/5 p-6 text-center">
-          <CheckCircle2 className="mx-auto h-10 w-10 text-primary" />
-          <div className="mt-3 text-lg font-bold">Booking confirmed!</div>
-          <p className="mt-1 text-sm text-muted-foreground">You're all set. See you on the court.</p>
-          <Button onClick={() => navigate({ to: "/" })} className="mt-4">Done</Button>
+        <div className="rounded-lg border border-primary/40 bg-primary/5 p-8 text-center">
+          <div className="mx-auto text-5xl">🎾</div>
+          <div className="mt-3 text-xl font-bold">You're all set!</div>
+          <p className="mt-2 text-sm text-muted-foreground">
+            Welcome to 2026 Tennis Lessons. We'll be in touch shortly with next steps.
+          </p>
+          <Button onClick={() => navigate({ to: "/" })} className="mt-5">Done</Button>
         </div>
-      ) : single ? (
-        <div className="rounded-lg border border-border bg-background overflow-hidden">
-          <LessonCheckout
-            lessonId={single.lesson.id}
-            studentId={single.item.studentId}
-            stayForMatchPlay={stayForMatchPlay}
-          />
-        </div>
+      ) : selectedMethod ? (
+        <PaymentConfirm
+          method={selectedMethod}
+          onConfirm={() => setPaid(true)}
+          onBack={() => setSelectedMethod(null)}
+        />
       ) : (
-        <div className="rounded-lg border-2 border-dashed border-border bg-secondary/20 p-4 text-sm text-muted-foreground">
-          Multiple-registration checkout is ready in the portal UI. Stripe checkout needs to be updated to charge this cart as one transaction.
-        </div>
+        <PaymentMethodPicker onSelect={setSelectedMethod} />
       )}
 
-      {!paid && (
+      {!paid && !selectedMethod && (
         <Button onClick={props.onBack} variant="ghost" className="w-full">
           ← Edit registrations
         </Button>
@@ -1135,3 +1131,129 @@ function NavRow({ onBack, onNext, loading, nextLabel }: { onBack: () => void; on
     </div>
   );
 }
+
+type PaymentMethod = {
+  id: "zelle" | "venmo" | "applepay" | "cashapp";
+  label: string;
+  sublabel: string;
+  initial: string;
+  bg: string;
+  text: string;
+  border: string;
+  hoverBorder: string;
+};
+
+const PAYMENT_METHODS: PaymentMethod[] = [
+  {
+    id: "zelle",
+    label: "Zelle",
+    sublabel: "Send to: your-email@email.com",
+    initial: "Z",
+    bg: "bg-purple-600",
+    text: "text-white",
+    border: "border-border",
+    hoverBorder: "hover:border-purple-600",
+  },
+  {
+    id: "venmo",
+    label: "Venmo",
+    sublabel: "@YourVenmoHandle",
+    initial: "V",
+    bg: "bg-blue-500",
+    text: "text-white",
+    border: "border-border",
+    hoverBorder: "hover:border-blue-500",
+  },
+  {
+    id: "applepay",
+    label: "Apple Pay",
+    sublabel: "Tap to pay with Face ID / Touch ID",
+    initial: "Pay",
+    bg: "bg-black",
+    text: "text-white",
+    border: "border-border",
+    hoverBorder: "hover:border-black",
+  },
+  {
+    id: "cashapp",
+    label: "Cash App",
+    sublabel: "$YourCashTag",
+    initial: "$",
+    bg: "bg-green-500",
+    text: "text-white",
+    border: "border-border",
+    hoverBorder: "hover:border-green-500",
+  },
+];
+
+function PaymentMethodPicker({ onSelect }: { onSelect: (m: PaymentMethod) => void }) {
+  return (
+    <div className="space-y-5">
+      <div className="text-center">
+        <h3 className="text-xl font-bold">Choose Your Payment Method</h3>
+        <p className="mt-1 text-sm text-muted-foreground">Select your preferred way to pay below</p>
+      </div>
+      <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
+        {PAYMENT_METHODS.map((m) => (
+          <button
+            key={m.id}
+            type="button"
+            onClick={() => onSelect(m)}
+            className={`group flex flex-col items-center gap-3 rounded-xl border-2 ${m.border} ${m.hoverBorder} bg-background p-5 text-center transition-all hover:shadow-md`}
+          >
+            <div
+              className={`flex h-14 w-14 items-center justify-center rounded-full ${m.bg} ${m.text} text-xl font-bold shadow`}
+            >
+              {m.initial}
+            </div>
+            <div>
+              <div className="text-base font-semibold">{m.label}</div>
+              <div className="mt-0.5 text-xs text-muted-foreground">{m.sublabel}</div>
+            </div>
+          </button>
+        ))}
+      </div>
+    </div>
+  );
+}
+
+function PaymentConfirm({
+  method,
+  onConfirm,
+  onBack,
+}: {
+  method: PaymentMethod;
+  onConfirm: () => void;
+  onBack: () => void;
+}) {
+  return (
+    <div className="space-y-4 rounded-xl border-2 border-border bg-secondary/20 p-5">
+      <div className="flex items-center gap-3">
+        <div
+          className={`flex h-12 w-12 items-center justify-center rounded-full ${method.bg} ${method.text} text-lg font-bold`}
+        >
+          {method.initial}
+        </div>
+        <div>
+          <div className="text-base font-semibold">You selected {method.label}.</div>
+          <div className="text-xs text-muted-foreground">{method.sublabel}</div>
+        </div>
+      </div>
+      <p className="text-sm">
+        Please complete your payment and then click "I've Paid" to confirm your registration.
+      </p>
+      <div className="flex flex-col-reverse gap-2 sm:flex-row">
+        <Button variant="outline" onClick={onBack} className="flex-1 bg-gray-100 hover:bg-gray-200">
+          Go Back
+        </Button>
+        <Button
+          onClick={onConfirm}
+          className="flex-1 bg-green-600 text-white hover:bg-green-700"
+        >
+          I've Paid ✓
+        </Button>
+      </div>
+    </div>
+  );
+}
+
