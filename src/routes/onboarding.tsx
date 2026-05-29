@@ -237,9 +237,11 @@ function OnboardingPage() {
   }
 
   // Persist all selected lessons across all participants as lesson_bookings
-  async function persistBookings(paymentMethod: string) {
+  // Persist all selected lessons across all participants as lesson_bookings
+  // Returns true on success, false on error
+  async function persistBookings(paymentMethod: string): Promise<boolean> {
     const { data: { user } } = await supabase.auth.getUser();
-    if (!user) return;
+    if (!user) return false;
     // ensure account-holder participant id
     let holderDbId: string | null = null;
     const { data: holderRow } = await supabase
@@ -270,12 +272,17 @@ function OnboardingPage() {
       payment_reported_at: string;
       policy_acknowledged: boolean;
       policy_acknowledged_at: string;
+      cancellation_status: string;
     };
     const rows: Row[] = [];
+    const seen = new Set<string>();
     for (const r of regs) {
       const pid = r.isAccountHolder ? holderDbId : r.dbId;
       if (!pid) continue;
       for (const l of r.lessons) {
+        const key = `${pid}::${l.lessonId}`;
+        if (seen.has(key)) continue;
+        seen.add(key);
         const start = new Date(l.lessonDateTime);
         const end = new Date(l.lessonEndTime);
         rows.push({
@@ -293,16 +300,22 @@ function OnboardingPage() {
           payment_reported_at: nowIso,
           policy_acknowledged: true,
           policy_acknowledged_at: nowIso,
+          cancellation_status: "Active",
         });
       }
     }
-    if (rows.length === 0) return;
-    const { error } = await supabase.from("lesson_bookings").insert(rows);
+    if (rows.length === 0) return true;
+    // Idempotent via unique partial index on (participant_id, lesson_id) WHERE cancellation_status='Active'
+    const { error } = await supabase
+      .from("lesson_bookings")
+      .upsert(rows, { onConflict: "participant_id,lesson_id", ignoreDuplicates: true });
     if (error) {
       console.error("lesson_bookings insert", error);
-      toast.error("Could not save your bookings — please contact the coach.");
+      return false;
     }
+    return true;
   }
+
 
   async function loadSavedParticipants() {
     const { data: { user } } = await supabase.auth.getUser();
