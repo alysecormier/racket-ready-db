@@ -403,6 +403,13 @@ function OnboardingPage() {
     return () => { cancelled = true; };
   }, [step]);
 
+  // Load saved participants when entering step 1
+  useEffect(() => {
+    if (step !== 1) return;
+    loadSavedParticipants();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [step]);
+
   async function startFresh() {
     await supabase.auth.signOut();
     setFullName(""); setEmail(""); setPhone(""); setPassword("");
