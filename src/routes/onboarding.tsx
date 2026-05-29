@@ -14,7 +14,6 @@ import { ToggleGroup, ToggleGroupItem } from "@/components/ui/toggle-group";
 import { Badge } from "@/components/ui/badge";
 import { useServerFn } from "@tanstack/react-start";
 import { signWaiver } from "@/lib/waiver.functions";
-import { presetByType } from "@/lib/lesson-presets";
 
 export const Route = createFileRoute("/onboarding")({
   head: () => ({
