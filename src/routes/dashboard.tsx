@@ -330,7 +330,9 @@ function ParticipantRow({ participant, onChanged }: { participant: Participant; 
 
   async function save() {
     setSaving(true);
-    const update: Record<string, unknown> = {
+  async function save() {
+    setSaving(true);
+    const update: { first_name: string; last_name: string; age?: number | null; gender?: string | null } = {
       first_name: firstName.trim(),
       last_name: lastName.trim(),
     };
@@ -339,9 +341,7 @@ function ParticipantRow({ participant, onChanged }: { participant: Participant; 
       update.gender = gender || null;
     }
     const { error } = await supabase.from("participants").update(update).eq("id", participant.id);
-    setSaving(false);
-    if (error) { toast.error("Could not save changes."); return; }
-    toast.success("Saved.");
+
     setEditing(false);
     onChanged();
   }
