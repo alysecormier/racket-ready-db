@@ -453,7 +453,7 @@ function OnboardingPage() {
               registrations={registrations}
               lessons={lessons}
               lessonsLoading={lessonsLoading}
-              invalidRegId={invalidRegId}
+              invalidRegIds={attemptedContinue ? new Set(registrations.filter(regMissingFields).map((r) => r.id)) : new Set<string>()}
               scrollToRegId={scrollToRegId}
               clearScroll={() => setScrollToRegId(null)}
               setRegPlayer={setRegPlayer}
