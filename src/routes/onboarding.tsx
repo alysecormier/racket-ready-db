@@ -1192,7 +1192,7 @@ function PaymentStep(props: {
 
   const total = items.reduce((sum, { lesson }) => sum + lesson.price, 0);
   const single = items.length === 1 ? items[0] : null;
-  const isMorningMix = single ? presetByType(single.lesson.lesson_type ?? "")?.type === "adult_morning_mix" : false;
+  const isMorningMix = single?.lesson.lesson_type === "adult_morning_mix";
 
   // Lesson date string for memo (first lesson date)
   const firstLessonDate = items[0]
