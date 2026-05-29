@@ -1235,7 +1235,16 @@ function ClientDetail({ client, onDeleted }: { client: Profile; onDeleted: () =>
   const [draft, setDraft] = useState("");
   const [saving, setSaving] = useState(false);
   const [clientLessons, setClientLessons] = useState<
-    Array<{ booking: Booking; lesson: Lesson; student: Student | null }>
+    Array<{
+      id: string;
+      lesson_name: string;
+      lesson_date: string;
+      lesson_start_time: string | null;
+      lesson_end_time: string | null;
+      participant_name: string;
+      deposit_status: string;
+      cancellation_status: string;
+    }>
   >([]);
   const [confirmDeleteOpen, setConfirmDeleteOpen] = useState(false);
   const [deleting, setDeleting] = useState(false);
@@ -1248,25 +1257,42 @@ function ClientDetail({ client, onDeleted }: { client: Profile; onDeleted: () =>
     setNotes(data ?? []);
   }
 
-  async function loadLessons(studentsList: Student[]) {
-    const { data: bData } = await supabase
-      .from("bookings").select("*").eq("profile_id", client.id);
-    const bookings = (bData ?? []) as Booking[];
-    if (bookings.length === 0) { setClientLessons([]); return; }
-    const lessonIds = Array.from(new Set(bookings.map((b) => b.lesson_id)));
-    const { data: lData } = await supabase
-      .from("lessons").select("*").in("id", lessonIds);
-    const lMap: Record<string, Lesson> = Object.fromEntries(((lData ?? []) as Lesson[]).map((l) => [l.id, l]));
-    const sMap: Record<string, Student> = Object.fromEntries(studentsList.map((s) => [s.id, s]));
-    const rows = bookings
-      .map((b) => ({
-        booking: b,
-        lesson: lMap[b.lesson_id],
-        student: b.student_id ? (sMap[b.student_id] ?? null) : null,
-      }))
-      .filter((r) => r.lesson)
-      .sort((a, b) => new Date(b.lesson.start_time).getTime() - new Date(a.lesson.start_time).getTime());
-    setClientLessons(rows);
+  async function loadLessons() {
+    const { data: lbData } = await supabase
+      .from("lesson_bookings")
+      .select("id, lesson_name, lesson_date, lesson_start_time, lesson_end_time, deposit_status, cancellation_status, participant_id")
+      .eq("account_id", client.id)
+      .order("lesson_date", { ascending: false });
+    const rows = (lbData ?? []) as Array<{
+      id: string; lesson_name: string; lesson_date: string;
+      lesson_start_time: string | null; lesson_end_time: string | null;
+      deposit_status: string; cancellation_status: string;
+      participant_id: string;
+    }>;
+    if (rows.length === 0) { setClientLessons([]); return; }
+    const partIds = Array.from(new Set(rows.map((r) => r.participant_id)));
+    const { data: pData } = await supabase
+      .from("participants")
+      .select("id, first_name, last_name, is_account_holder")
+      .in("id", partIds);
+    const pMap: Record<string, { first_name: string; last_name: string; is_account_holder: boolean }> =
+      Object.fromEntries(((pData ?? []) as Array<{ id: string; first_name: string; last_name: string; is_account_holder: boolean }>).map((p) => [p.id, p]));
+    setClientLessons(rows.map((r) => {
+      const p = pMap[r.participant_id];
+      const name = p
+        ? (p.is_account_holder ? "Account holder" : `${p.first_name} ${p.last_name}`.trim())
+        : "Participant";
+      return {
+        id: r.id,
+        lesson_name: r.lesson_name,
+        lesson_date: r.lesson_date,
+        lesson_start_time: r.lesson_start_time,
+        lesson_end_time: r.lesson_end_time,
+        participant_name: name,
+        deposit_status: r.deposit_status,
+        cancellation_status: r.cancellation_status,
+      };
+    }));
   }
 
   useEffect(() => {
@@ -1274,7 +1300,7 @@ function ClientDetail({ client, onDeleted }: { client: Profile; onDeleted: () =>
       const { data } = await supabase.from("students").select("*").eq("parent_id", client.id);
       const studentsList = (data ?? []) as Student[];
       setStudents(studentsList);
-      await Promise.all([loadNotes(), loadLessons(studentsList)]);
+      await Promise.all([loadNotes(), loadLessons()]);
     })();
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [client.id]);
