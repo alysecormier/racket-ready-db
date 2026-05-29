@@ -1494,7 +1494,7 @@ function PaymentStep(props: {
           memo={memoInfo.memo}
           memoNames={memoInfo.names}
           memoDate={memoInfo.dateStr}
-          onConfirm={() => setPaid(true)}
+          onConfirm={async () => { await props.onPaid(selectedMethod!.label); setPaid(true); }}
           onBack={() => setSelectedMethod(null)}
         />
       ) : (
