@@ -9,7 +9,7 @@ import { Card } from "@/components/ui/card";
 import { toast } from "sonner";
 import { Toaster } from "@/components/ui/sonner";
 import { z } from "zod";
-import { CheckCircle2, AlertTriangle, CalendarDays, DollarSign, Plus, X, Pencil } from "lucide-react";
+import { CheckCircle2, AlertTriangle, CalendarDays, DollarSign, Plus, X, Pencil, Check } from "lucide-react";
 import { useServerFn } from "@tanstack/react-start";
 import { signWaiver } from "@/lib/waiver.functions";
 
