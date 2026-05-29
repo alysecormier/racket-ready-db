@@ -264,7 +264,7 @@ function OnboardingPage() {
 
   // -------- Registration helpers --------
   function updateRegistration(id: string, patch: Partial<Registration> | ((r: Registration) => Partial<Registration>)) {
-    setInvalidRegId(null);
+    // live invalid computed in render
     setRegistrations((rs) =>
       rs.map((r) => {
         if (r.id !== id) return r;
@@ -275,14 +275,14 @@ function OnboardingPage() {
   }
 
   function setRegPlayer(id: string, patch: Partial<Registration["player"]>) {
-    setInvalidRegId(null);
+    // live invalid computed in render
     setRegistrations((rs) =>
       rs.map((r) => (r.id === id ? { ...r, player: { ...r.player, ...patch } } : r)),
     );
   }
 
   function setRegLesson(id: string, lessonId: string) {
-    setInvalidRegId(null);
+    // live invalid computed in render
     const lesson = lessons.find((l) => l.id === lessonId);
     setRegistrations((rs) =>
       rs.map((r) =>
