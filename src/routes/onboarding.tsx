@@ -741,7 +741,8 @@ function OnboardingPage() {
               registrations={registrations}
               accountHolder={accountHolder}
               onBack={() => setStep(3)}
-              onDone={() => navigate({ to: "/" })}
+              onPaid={persistBookings}
+              onDone={() => navigate({ to: "/dashboard" })}
             />
           )}
         </Card>
