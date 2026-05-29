@@ -152,6 +152,8 @@ function CalendarTab() {
   }, [lessons, selectedDate]);
 
   return (
+    <div className="space-y-6">
+      <LessonScheduleSettings lessons={lessons} />
     <div className="grid gap-6 lg:grid-cols-[auto_1fr]">
       <Card className="p-4">
         <Calendar
