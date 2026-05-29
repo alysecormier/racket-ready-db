@@ -49,8 +49,11 @@ type SelectedLesson = {
 
 type Registration = {
   id: string;
+  /** Supabase participants.id once persisted */
+  dbId?: string | null;
   registrantType: RegistrantType;
   isAccountHolder: boolean;
+  fromSaved?: boolean;
   player: {
     firstName: string;
     lastName: string;
@@ -59,6 +62,15 @@ type Registration = {
   };
   lessons: SelectedLesson[];
   participantSubtotal: number;
+};
+
+type SavedParticipant = {
+  id: string;
+  first_name: string;
+  last_name: string;
+  participant_type: RegistrantType;
+  age: number | null;
+  gender: string | null;
 };
 
 const GENDERS = ["Boy", "Girl", "Prefer Not to Say"] as const;
