@@ -1615,6 +1615,7 @@ function PaymentConfirm({
   memoDate,
   onConfirm,
   onBack,
+  saving = false,
 }: {
   method: PaymentMethod;
   depositAmount: number;
@@ -1623,7 +1624,9 @@ function PaymentConfirm({
   memoDate: string;
   onConfirm: () => void;
   onBack: () => void;
+  saving?: boolean;
 }) {
+
   const amount = depositAmount.toFixed(2);
   let body: React.ReactNode = null;
 
