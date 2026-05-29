@@ -590,7 +590,7 @@ function PlayersAndLessonsStep(props: {
   registrations: Registration[];
   lessons: Lesson[];
   lessonsLoading: boolean;
-  invalidRegId: string | null;
+  invalidRegIds: Set<string>;
   scrollToRegId: string | null;
   clearScroll: () => void;
   setRegPlayer: (id: string, patch: Partial<Registration["player"]>) => void;
