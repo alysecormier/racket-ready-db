@@ -158,6 +158,175 @@ function OnboardingPage() {
   // admin-controlled active week (Date at midnight, Sunday of week)
   const [activeWeekStart, setActiveWeekStart] = useState<Date | null>(null);
 
+  // saved participants from previous registrations
+  const [savedParticipants, setSavedParticipants] = useState<SavedParticipant[]>([]);
+
+  // Persist account row + account-holder participant. Idempotent (upsert by id).
+  async function persistAccountHolder(
+    userId: string,
+    fields: { firstName: string; lastName: string; email: string; phone: string },
+  ) {
+    const { error: accErr } = await supabase
+      .from("accounts")
+      .upsert(
+        {
+          id: userId,
+          first_name: fields.firstName,
+          last_name: fields.lastName,
+          email: fields.email,
+          phone: fields.phone,
+        },
+        { onConflict: "id" },
+      );
+    if (accErr) console.error("accounts upsert", accErr);
+
+    // ensure account-holder participant exists exactly once
+    const { data: existing } = await supabase
+      .from("participants")
+      .select("id")
+      .eq("account_id", userId)
+      .eq("is_account_holder", true)
+      .maybeSingle();
+    if (!existing) {
+      await supabase.from("participants").insert({
+        account_id: userId,
+        first_name: fields.firstName || "Account",
+        last_name: fields.lastName || "Holder",
+        participant_type: "adult",
+        is_account_holder: true,
+        is_saved: true,
+      });
+    } else {
+      await supabase
+        .from("participants")
+        .update({ first_name: fields.firstName, last_name: fields.lastName })
+        .eq("id", existing.id);
+    }
+  }
+
+  // Persist any registrations that don't yet have a participants.id
+  async function persistAdditionalParticipants() {
+    const { data: { user } } = await supabase.auth.getUser();
+    if (!user) return;
+    const updated: Registration[] = [];
+    for (const r of registrations) {
+      if (r.isAccountHolder || r.dbId) { updated.push(r); continue; }
+      const { data, error } = await supabase
+        .from("participants")
+        .insert({
+          account_id: user.id,
+          first_name: r.player.firstName.trim(),
+          last_name: r.player.lastName.trim(),
+          participant_type: r.registrantType,
+          age: r.player.age,
+          gender: r.player.gender,
+          is_account_holder: false,
+          is_saved: true,
+        })
+        .select("id")
+        .single();
+      if (error || !data) {
+        console.error("participants insert", error);
+        updated.push(r);
+      } else {
+        updated.push({ ...r, dbId: data.id });
+      }
+    }
+    setRegistrations(updated);
+    return updated;
+  }
+
+  // Persist all selected lessons across all participants as lesson_bookings
+  async function persistBookings(paymentMethod: string) {
+    const { data: { user } } = await supabase.auth.getUser();
+    if (!user) return;
+    // ensure account-holder participant id
+    let holderDbId: string | null = null;
+    const { data: holderRow } = await supabase
+      .from("participants")
+      .select("id")
+      .eq("account_id", user.id)
+      .eq("is_account_holder", true)
+      .maybeSingle();
+    holderDbId = holderRow?.id ?? null;
+
+    // also persist any participants missing dbId
+    const persisted = await persistAdditionalParticipants();
+    const regs = persisted ?? registrations;
+
+    const nowIso = new Date().toISOString();
+    type Row = {
+      account_id: string;
+      participant_id: string;
+      lesson_id: string;
+      lesson_name: string;
+      lesson_date: string;
+      lesson_start_time: string;
+      lesson_end_time: string;
+      lesson_price: number;
+      deposit_amount: number;
+      deposit_status: string;
+      payment_method: string;
+      payment_reported_at: string;
+      policy_acknowledged: boolean;
+      policy_acknowledged_at: string;
+    };
+    const rows: Row[] = [];
+    for (const r of regs) {
+      const pid = r.isAccountHolder ? holderDbId : r.dbId;
+      if (!pid) continue;
+      for (const l of r.lessons) {
+        const start = new Date(l.lessonDateTime);
+        const end = new Date(l.lessonEndTime);
+        rows.push({
+          account_id: user.id,
+          participant_id: pid,
+          lesson_id: l.lessonId,
+          lesson_name: l.lessonName,
+          lesson_date: start.toISOString().slice(0, 10),
+          lesson_start_time: start.toTimeString().slice(0, 8),
+          lesson_end_time: end.toTimeString().slice(0, 8),
+          lesson_price: l.depositAmount,
+          deposit_amount: l.depositAmount,
+          deposit_status: "Pending",
+          payment_method: paymentMethod,
+          payment_reported_at: nowIso,
+          policy_acknowledged: true,
+          policy_acknowledged_at: nowIso,
+        });
+      }
+    }
+    if (rows.length === 0) return;
+    const { error } = await supabase.from("lesson_bookings").insert(rows);
+    if (error) {
+      console.error("lesson_bookings insert", error);
+      toast.error("Could not save your bookings — please contact the coach.");
+    }
+  }
+
+  async function loadSavedParticipants() {
+    const { data: { user } } = await supabase.auth.getUser();
+    if (!user) { setSavedParticipants([]); return; }
+    const { data } = await supabase
+      .from("participants")
+      .select("id, first_name, last_name, participant_type, age, gender, is_account_holder, is_saved")
+      .eq("account_id", user.id)
+      .eq("is_saved", true)
+      .eq("is_account_holder", false)
+      .order("created_at", { ascending: true });
+    setSavedParticipants(
+      (data ?? []).map((p) => ({
+        id: p.id,
+        first_name: p.first_name,
+        last_name: p.last_name,
+        participant_type: p.participant_type as RegistrantType,
+        age: p.age,
+        gender: p.gender,
+      })),
+    );
+  }
+
+
   // Initialize account holder registration once we know the name
   useEffect(() => {
     if (step !== 1) return;
