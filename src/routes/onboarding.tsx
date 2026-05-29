@@ -12,8 +12,6 @@ import { z } from "zod";
 import { CheckCircle2, AlertTriangle, Plus, Trash2, CalendarDays, Users, DollarSign, LayoutGrid, CalendarRange } from "lucide-react";
 import { ToggleGroup, ToggleGroupItem } from "@/components/ui/toggle-group";
 import { Badge } from "@/components/ui/badge";
-import { LessonCheckout } from "@/components/LessonCheckout";
-import { PaymentTestModeBanner } from "@/components/PaymentTestModeBanner";
 import { useServerFn } from "@tanstack/react-start";
 import { signWaiver } from "@/lib/waiver.functions";
 import { getMatchPlayRoster } from "@/lib/match-play.functions";
