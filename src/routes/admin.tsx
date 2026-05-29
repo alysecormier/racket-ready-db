@@ -1378,37 +1378,42 @@ function ClientDetail({ client, onDeleted }: { client: Profile; onDeleted: () =>
           <p className="text-sm text-muted-foreground">No bookings yet.</p>
         ) : (
           <div className="space-y-2">
-            {clientLessons.map(({ booking, lesson, student }) => {
-              const start = new Date(lesson.start_time);
-              const end = new Date(lesson.end_time);
+            {clientLessons.map((row) => {
+              const start = row.lesson_start_time
+                ? new Date(`${row.lesson_date}T${row.lesson_start_time}`)
+                : new Date(row.lesson_date);
               return (
-                <div key={booking.id} className="rounded-lg border border-border bg-secondary/30 p-3">
+                <div key={row.id} className="rounded-lg border border-border bg-secondary/30 p-3">
                   <div className="flex items-start justify-between gap-3">
                     <div className="min-w-0">
-                      <div className="font-medium">{lesson.title}</div>
+                      <div className="font-medium">{row.lesson_name}</div>
                       <div className="mt-0.5 flex flex-wrap items-center gap-3 text-xs text-muted-foreground">
                         <span className="inline-flex items-center gap-1">
                           <CalIcon className="h-3 w-3" />
                           {start.toLocaleDateString(undefined, { weekday: "short", month: "short", day: "numeric" })}
                         </span>
-                        <span className="inline-flex items-center gap-1">
-                          <Clock className="h-3 w-3" />
-                          {fmtTime(lesson.start_time)} – {fmtTime(lesson.end_time)}
-                        </span>
+                        {row.lesson_start_time && (
+                          <span className="inline-flex items-center gap-1">
+                            <Clock className="h-3 w-3" />
+                            {row.lesson_start_time.slice(0, 5)}
+                            {row.lesson_end_time ? ` – ${row.lesson_end_time.slice(0, 5)}` : ""}
+                          </span>
+                        )}
                         <span className="inline-flex items-center gap-1">
                           <Users className="h-3 w-3" />
-                          {student?.name ?? "Adult"}
+                          {row.participant_name}
                         </span>
                       </div>
                     </div>
                     <div className="flex flex-col items-end gap-1">
-                      <PaymentBadge status={booking.payment_status} />
-                      <WaiverBadge signed={booking.signed_waiver || client.waiver_signed} />
+                      <Badge variant={row.deposit_status === "Paid" ? "default" : "secondary"}>
+                        {row.deposit_status}
+                      </Badge>
+                      {row.cancellation_status !== "Active" && (
+                        <Badge variant="destructive">{row.cancellation_status}</Badge>
+                      )}
                     </div>
                   </div>
-                  <span className="sr-only">
-                    Ends {end.toISOString()}
-                  </span>
                 </div>
               );
             })}
