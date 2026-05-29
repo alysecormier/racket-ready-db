@@ -1565,19 +1565,6 @@ function PaymentStep(props: {
   );
 }
 
-        />
-      ) : (
-        <PaymentMethodPicker onSelect={setSelectedMethod} />
-      )}
-
-      {!paid && !selectedMethod && (
-        <Button onClick={props.onBack} variant="ghost" className="w-full">
-          ← Back to review
-        </Button>
-      )}
-    </div>
-  );
-}
 
 function PaymentMethodPicker({ onSelect }: { onSelect: (m: PaymentMethod) => void }) {
   return (
