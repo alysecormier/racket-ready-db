@@ -1374,8 +1374,8 @@ type PaymentMethod = {
   hoverBorder: string;
 };
 
-const ALYSE_PHONE_DISPLAY = "337-345-2908";
-const ALYSE_PHONE_RAW = "3373452908";
+const ALYSE_PHONE_DISPLAY = "337-945-2908";
+const ALYSE_PHONE_RAW = "3379452908";
 const ALYSE_NAME = "Alyse Cormier";
 const ALYSE_EMAIL = "alysemcormier@gmail.com";
 const VENMO_HANDLE = "@alysecormier";
