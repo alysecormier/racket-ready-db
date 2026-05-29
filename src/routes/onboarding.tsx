@@ -237,9 +237,11 @@ function OnboardingPage() {
   }
 
   // Persist all selected lessons across all participants as lesson_bookings
-  async function persistBookings(paymentMethod: string) {
+  // Persist all selected lessons across all participants as lesson_bookings
+  // Returns true on success, false on error
+  async function persistBookings(paymentMethod: string): Promise<boolean> {
     const { data: { user } } = await supabase.auth.getUser();
-    if (!user) return;
+    if (!user) return false;
     // ensure account-holder participant id
     let holderDbId: string | null = null;
     const { data: holderRow } = await supabase
@@ -270,12 +272,17 @@ function OnboardingPage() {
       payment_reported_at: string;
       policy_acknowledged: boolean;
       policy_acknowledged_at: string;
+      cancellation_status: string;
     };
     const rows: Row[] = [];
+    const seen = new Set<string>();
     for (const r of regs) {
       const pid = r.isAccountHolder ? holderDbId : r.dbId;
       if (!pid) continue;
       for (const l of r.lessons) {
+        const key = `${pid}::${l.lessonId}`;
+        if (seen.has(key)) continue;
+        seen.add(key);
         const start = new Date(l.lessonDateTime);
         const end = new Date(l.lessonEndTime);
         rows.push({
@@ -293,16 +300,22 @@ function OnboardingPage() {
           payment_reported_at: nowIso,
           policy_acknowledged: true,
           policy_acknowledged_at: nowIso,
+          cancellation_status: "Active",
         });
       }
     }
-    if (rows.length === 0) return;
-    const { error } = await supabase.from("lesson_bookings").insert(rows);
+    if (rows.length === 0) return true;
+    // Idempotent via unique partial index on (participant_id, lesson_id) WHERE cancellation_status='Active'
+    const { error } = await supabase
+      .from("lesson_bookings")
+      .upsert(rows, { onConflict: "participant_id,lesson_id", ignoreDuplicates: true });
     if (error) {
       console.error("lesson_bookings insert", error);
-      toast.error("Could not save your bookings — please contact the coach.");
+      return false;
     }
+    return true;
   }
+
 
   async function loadSavedParticipants() {
     const { data: { user } } = await supabase.auth.getUser();
@@ -1428,11 +1441,14 @@ function PaymentStep(props: {
   registrations: Registration[];
   accountHolder: AccountHolderInfo;
   onBack: () => void;
-  onPaid: (paymentMethod: string) => Promise<void>;
+  onPaid: (paymentMethod: string) => Promise<boolean>;
   onDone: () => void;
 }) {
   const [paid, setPaid] = useState(false);
+  const [saving, setSaving] = useState(false);
+  const [saveError, setSaveError] = useState<string | null>(null);
   const [selectedMethod, setSelectedMethod] = useState<PaymentMethod | null>(null);
+  const navigate = useNavigate();
 
   const total = props.registrations.reduce((s, r) => s + r.participantSubtotal, 0);
 
@@ -1446,6 +1462,13 @@ function PaymentStep(props: {
       : "";
     return { names, dateStr, memo: `${names.join(", ")} – ${dateStr}` };
   }, [props.registrations]);
+
+  function downloadAllSessionIcs() {
+    for (const r of props.registrations) {
+      if (r.lessons.length === 0) continue;
+      downloadIcs(r, r.player.firstName || props.accountHolder.firstName || "participant");
+    }
+  }
 
   return (
     <div className="space-y-5">
@@ -1479,24 +1502,56 @@ function PaymentStep(props: {
       </div>
 
       {paid ? (
-        <div className="rounded-lg border border-primary/40 bg-primary/5 p-8 text-center">
+        <div className="rounded-lg border-2 border-green-600/40 bg-green-50 p-8 text-center dark:bg-green-950/20">
           <div className="mx-auto text-5xl">🎾</div>
-          <div className="mt-3 text-xl font-bold">You're all set!</div>
-          <p className="mt-2 text-sm text-muted-foreground">
-            Welcome to 2026 Tennis Lessons. We'll be in touch shortly with next steps.
+          <div className="mt-3 text-2xl font-bold">You're Registered!</div>
+          <p className="mt-3 text-sm text-foreground">
+            Thank you, <span className="font-semibold">{props.accountHolder.firstName || "friend"}</span>. Your lesson registration has been received. A confirmation email has been sent to{" "}
+            <span className="font-semibold">{props.accountHolder.email}</span>.
           </p>
-          <Button onClick={props.onDone} className="mt-5">Done</Button>
+          <p className="mt-3 text-sm text-muted-foreground">
+            Your deposit is pending verification. You will receive a second email once confirmed.
+          </p>
+          <div className="mt-6 flex flex-col gap-2 sm:flex-row sm:justify-center">
+            <Button
+              onClick={() => navigate({ to: "/dashboard" })}
+              className="bg-green-600 text-white hover:bg-green-700"
+            >
+              View My Lessons
+            </Button>
+            <Button onClick={downloadAllSessionIcs} variant="outline">
+              <Download className="mr-1 h-4 w-4" /> Add Lessons to Calendar
+            </Button>
+          </div>
         </div>
       ) : selectedMethod ? (
-        <PaymentConfirm
-          method={selectedMethod}
-          depositAmount={total}
-          memo={memoInfo.memo}
-          memoNames={memoInfo.names}
-          memoDate={memoInfo.dateStr}
-          onConfirm={async () => { await props.onPaid(selectedMethod!.label); setPaid(true); }}
-          onBack={() => setSelectedMethod(null)}
-        />
+        <>
+          <PaymentConfirm
+            method={selectedMethod}
+            depositAmount={total}
+            memo={memoInfo.memo}
+            memoNames={memoInfo.names}
+            memoDate={memoInfo.dateStr}
+            saving={saving}
+            onConfirm={async () => {
+              setSaveError(null);
+              setSaving(true);
+              const ok = await props.onPaid(selectedMethod!.label);
+              setSaving(false);
+              if (!ok) {
+                setSaveError("Something went wrong saving your registration. Please try again or contact alysemcormier@gmail.com");
+                return;
+              }
+              setPaid(true);
+            }}
+            onBack={() => setSelectedMethod(null)}
+          />
+          {saveError && (
+            <div className="rounded-md border border-destructive/40 bg-destructive/10 p-3 text-sm text-destructive">
+              {saveError}
+            </div>
+          )}
+        </>
       ) : (
         <PaymentMethodPicker onSelect={setSelectedMethod} />
       )}
@@ -1509,6 +1564,7 @@ function PaymentStep(props: {
     </div>
   );
 }
+
 
 function PaymentMethodPicker({ onSelect }: { onSelect: (m: PaymentMethod) => void }) {
   return (
@@ -1559,6 +1615,7 @@ function PaymentConfirm({
   memoDate,
   onConfirm,
   onBack,
+  saving = false,
 }: {
   method: PaymentMethod;
   depositAmount: number;
@@ -1567,7 +1624,9 @@ function PaymentConfirm({
   memoDate: string;
   onConfirm: () => void;
   onBack: () => void;
+  saving?: boolean;
 }) {
+
   const amount = depositAmount.toFixed(2);
   let body: React.ReactNode = null;
 
@@ -1669,12 +1728,14 @@ function PaymentConfirm({
       <div className="flex flex-col-reverse gap-2 sm:flex-row">
         <Button variant="outline" onClick={onBack} className="flex-1 bg-gray-100 hover:bg-gray-200">
           Go Back
-        </Button>
         <Button
           onClick={onConfirm}
+          disabled={saving}
           className="flex-1 bg-green-600 text-white hover:bg-green-700"
         >
-          I've Paid ✓
+          {saving ? "Saving…" : "I've Paid ✓"}
+        </Button>
+
         </Button>
       </div>
     </div>
