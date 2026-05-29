@@ -152,6 +152,8 @@ function CalendarTab() {
   }, [lessons, selectedDate]);
 
   return (
+    <div className="space-y-6">
+      <LessonScheduleSettings lessons={lessons} />
     <div className="grid gap-6 lg:grid-cols-[auto_1fr]">
       <Card className="p-4">
         <Calendar
@@ -237,6 +239,123 @@ function CalendarTab() {
         onDone={() => { setWeatherTarget(null); load(); }}
       />
     </div>
+    </div>
+  );
+}
+
+function LessonScheduleSettings({ lessons }: { lessons: Lesson[] }) {
+  const [activeWeek, setActiveWeek] = useState<Date | null>(null);
+  const [previewWeek, setPreviewWeek] = useState<Date>(() => {
+    const d = new Date();
+    d.setHours(0, 0, 0, 0);
+    d.setDate(d.getDate() - d.getDay());
+    return d;
+  });
+  const [saving, setSaving] = useState(false);
+
+  async function loadActive() {
+    const { data } = await supabase
+      .from("app_settings" as never)
+      .select("value")
+      .eq("key", "active_week_start")
+      .maybeSingle();
+    const raw = (data as { value?: string } | null)?.value;
+    if (typeof raw === "string" && raw) {
+      const [y, m, d] = raw.split("-").map(Number);
+      if (y && m && d) {
+        const wk = new Date(y, m - 1, d);
+        setActiveWeek(wk);
+        setPreviewWeek(wk);
+      }
+    }
+  }
+  useEffect(() => { loadActive(); }, []);
+
+  const previewEnd = new Date(previewWeek);
+  previewEnd.setDate(previewEnd.getDate() + 6);
+  const previewLessons = lessons
+    .filter((l) => {
+      const t = new Date(l.start_time).getTime();
+      return t >= previewWeek.getTime() && t < previewWeek.getTime() + 7 * 86400000;
+    })
+    .sort((a, b) => new Date(a.start_time).getTime() - new Date(b.start_time).getTime());
+
+  function shift(delta: number) {
+    const d = new Date(previewWeek);
+    d.setDate(d.getDate() + delta * 7);
+    setPreviewWeek(d);
+  }
+
+  function fmtRange(start: Date) {
+    const end = new Date(start);
+    end.setDate(end.getDate() + 6);
+    const s = start.toLocaleDateString(undefined, { month: "short", day: "numeric" });
+    const e = end.toLocaleDateString(undefined, { month: "short", day: "numeric", year: "numeric" });
+    return `${s} – ${e}`;
+  }
+
+  async function setAsActive() {
+    setSaving(true);
+    const y = previewWeek.getFullYear();
+    const m = previewWeek.getMonth() + 1;
+    const d = previewWeek.getDate();
+    const iso = `${y}-${m < 10 ? "0" : ""}${m}-${d < 10 ? "0" : ""}${d}`;
+    const { error } = await supabase
+      .from("app_settings" as never)
+      .upsert({ key: "active_week_start", value: iso, updated_at: new Date().toISOString() } as never, { onConflict: "key" });
+    setSaving(false);
+    if (error) { toast.error(error.message); return; }
+    setActiveWeek(new Date(previewWeek));
+    toast.success(`Active week updated to ${fmtRange(previewWeek)}`);
+  }
+
+  return (
+    <Card className="p-5">
+      <h2 className="text-lg font-bold">Lesson Schedule Settings</h2>
+      <div className="mt-2 text-sm">
+        <span className="text-muted-foreground">Current Active Week: </span>
+        <span className="font-semibold">{activeWeek ? fmtRange(activeWeek) : "—"}</span>
+      </div>
+      <div className="mt-3 flex items-center justify-between gap-2 rounded-md border border-border bg-secondary/30 px-2 py-1.5">
+        <Button type="button" variant="ghost" size="sm" onClick={() => shift(-1)}>← Previous Week</Button>
+        <input
+          type="date"
+          value={`${previewWeek.getFullYear()}-${String(previewWeek.getMonth() + 1).padStart(2, "0")}-${String(previewWeek.getDate()).padStart(2, "0")}`}
+          onChange={(e) => {
+            const [y, m, d] = e.target.value.split("-").map(Number);
+            if (y && m && d) {
+              const picked = new Date(y, m - 1, d);
+              picked.setDate(picked.getDate() - picked.getDay());
+              setPreviewWeek(picked);
+            }
+          }}
+          className="h-8 rounded border border-input bg-background px-2 text-xs"
+        />
+        <span className="text-sm font-medium">{fmtRange(previewWeek)}</span>
+        <Button type="button" variant="ghost" size="sm" onClick={() => shift(1)}>Next Week →</Button>
+      </div>
+      <div className="mt-3 rounded-md border border-border p-3">
+        <div className="text-xs font-semibold text-muted-foreground">Lessons clients will see this week:</div>
+        {previewLessons.length === 0 ? (
+          <div className="mt-1 text-xs text-muted-foreground">No lessons in this week.</div>
+        ) : (
+          <ul className="mt-1 space-y-0.5 text-xs">
+            {previewLessons.map((l) => {
+              const d = new Date(l.start_time);
+              const e = new Date(l.end_time);
+              return (
+                <li key={l.id}>
+                  - {l.title} — {d.toLocaleDateString(undefined, { weekday: "short", month: "short", day: "numeric" })}, {d.toLocaleTimeString(undefined, { hour: "numeric", minute: "2-digit" })}–{e.toLocaleTimeString(undefined, { hour: "numeric", minute: "2-digit" })} — ${Number(l.price).toFixed(0)}
+                </li>
+              );
+            })}
+          </ul>
+        )}
+      </div>
+      <Button onClick={setAsActive} disabled={saving} className="mt-3 bg-green-600 text-white hover:bg-green-700">
+        {saving ? "Saving…" : "Set as Active Week"}
+      </Button>
+    </Card>
   );
 }
 

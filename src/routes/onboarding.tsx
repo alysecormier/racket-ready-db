@@ -9,7 +9,7 @@ import { Card } from "@/components/ui/card";
 import { toast } from "sonner";
 import { Toaster } from "@/components/ui/sonner";
 import { z } from "zod";
-import { CheckCircle2, AlertTriangle, CalendarDays, DollarSign, Plus, X, Pencil, Check } from "lucide-react";
+import { CheckCircle2, AlertTriangle, CalendarDays, DollarSign, Plus, X, Pencil, Check, Download } from "lucide-react";
 import { useServerFn } from "@tanstack/react-start";
 import { signWaiver } from "@/lib/waiver.functions";
 
@@ -36,6 +36,17 @@ type Lesson = {
 
 type RegistrantType = "adult" | "junior";
 
+type SelectedLesson = {
+  lessonId: string;
+  lessonName: string;
+  lessonDateTime: string;
+  lessonEndTime: string;
+  depositAmount: number;
+  depositStatus: "Pending";
+  cancellationStatus: "Active";
+  cancellationRequestedAt: string | null;
+};
+
 type Registration = {
   id: string;
   registrantType: RegistrantType;
@@ -46,10 +57,8 @@ type Registration = {
     age: number | null;
     gender: string | null;
   };
-  lessonId: string;
-  lessonDateTime: string;
-  depositAmount: number;
-  depositStatus: "Pending";
+  lessons: SelectedLesson[];
+  participantSubtotal: number;
 };
 
 const GENDERS = ["Boy", "Girl", "Prefer Not to Say"] as const;
@@ -134,6 +143,9 @@ function OnboardingPage() {
   const [lessons, setLessons] = useState<Lesson[]>([]);
   const [lessonsLoading, setLessonsLoading] = useState(false);
 
+  // admin-controlled active week (Date at midnight, Sunday of week)
+  const [activeWeekStart, setActiveWeekStart] = useState<Date | null>(null);
+
   // Initialize account holder registration once we know the name
   useEffect(() => {
     if (step !== 1) return;
@@ -145,10 +157,8 @@ function OnboardingPage() {
         registrantType: "adult",
         isAccountHolder: true,
         player: { firstName: first, lastName: last, age: null, gender: null },
-        lessonId: "",
-        lessonDateTime: "",
-        depositAmount: 0,
-        depositStatus: "Pending",
+        lessons: [],
+        participantSubtotal: 0,
       };
       return [holder, ...prev];
     });
@@ -187,6 +197,27 @@ function OnboardingPage() {
       }));
       setLessons(enriched);
       setLessonsLoading(false);
+    })();
+    return () => { cancelled = true; };
+  }, [step]);
+
+  // Load admin-controlled active week
+  useEffect(() => {
+    if (step !== 1) return;
+    let cancelled = false;
+    (async () => {
+      const { data } = await supabase
+        .from("app_settings" as never)
+        .select("value")
+        .eq("key", "active_week_start")
+        .maybeSingle();
+      if (cancelled) return;
+      const raw = (data as { value?: string } | null)?.value;
+      if (typeof raw === "string" && raw) {
+        // raw is YYYY-MM-DD (a Sunday); construct local midnight
+        const [y, m, d] = raw.split("-").map(Number);
+        if (y && m && d) setActiveWeekStart(new Date(y, m - 1, d));
+      }
     })();
     return () => { cancelled = true; };
   }, [step]);
@@ -281,20 +312,41 @@ function OnboardingPage() {
     );
   }
 
-  function setRegLesson(id: string, lessonId: string) {
-    // live invalid computed in render
+  function toggleRegLesson(id: string, lessonId: string) {
     const lesson = lessons.find((l) => l.id === lessonId);
+    if (!lesson) return;
     setRegistrations((rs) =>
-      rs.map((r) =>
-        r.id === id
-          ? {
-              ...r,
-              lessonId,
-              lessonDateTime: lesson ? lesson.start_time : "",
-              depositAmount: lesson ? Number(lesson.price) : 0,
-            }
-          : r,
-      ),
+      rs.map((r) => {
+        if (r.id !== id) return r;
+        const exists = r.lessons.some((l) => l.lessonId === lessonId);
+        const nextLessons = exists
+          ? r.lessons.filter((l) => l.lessonId !== lessonId)
+          : [
+              ...r.lessons,
+              {
+                lessonId,
+                lessonName: lesson.title,
+                lessonDateTime: lesson.start_time,
+                lessonEndTime: lesson.end_time,
+                depositAmount: Number(lesson.price),
+                depositStatus: "Pending" as const,
+                cancellationStatus: "Active" as const,
+                cancellationRequestedAt: null,
+              },
+            ];
+        const participantSubtotal = nextLessons.reduce((s, l) => s + l.depositAmount, 0);
+        return { ...r, lessons: nextLessons, participantSubtotal };
+      }),
+    );
+  }
+
+  function removeRegLesson(id: string, lessonId: string) {
+    setRegistrations((rs) =>
+      rs.map((r) => {
+        if (r.id !== id) return r;
+        const nextLessons = r.lessons.filter((l) => l.lessonId !== lessonId);
+        return { ...r, lessons: nextLessons, participantSubtotal: nextLessons.reduce((s, l) => s + l.depositAmount, 0) };
+      }),
     );
   }
 
@@ -310,10 +362,8 @@ function OnboardingPage() {
         registrantType: "adult",
         isAccountHolder: false,
         player: { firstName: "", lastName: "", age: null, gender: null },
-        lessonId: "",
-        lessonDateTime: "",
-        depositAmount: 0,
-        depositStatus: "Pending",
+        lessons: [],
+        participantSubtotal: 0,
       },
     ]);
   }
@@ -330,10 +380,8 @@ function OnboardingPage() {
         registrantType: "junior",
         isAccountHolder: false,
         player: { firstName: "", lastName: "", age: null, gender: "" },
-        lessonId: "",
-        lessonDateTime: "",
-        depositAmount: 0,
-        depositStatus: "Pending",
+        lessons: [],
+        participantSubtotal: 0,
       },
     ]);
   }
@@ -350,7 +398,7 @@ function OnboardingPage() {
       if (r.player.age === null || Number.isNaN(r.player.age) || r.player.age >= 18) return true;
       if (!r.player.gender) return true;
     }
-    if (!r.lessonId) return true;
+    if (r.lessons.length === 0) return true;
     return false;
   }
 
@@ -453,11 +501,13 @@ function OnboardingPage() {
               registrations={registrations}
               lessons={lessons}
               lessonsLoading={lessonsLoading}
+              activeWeekStart={activeWeekStart}
               invalidRegIds={attemptedContinue ? new Set(registrations.filter(regMissingFields).map((r) => r.id)) : new Set<string>()}
               scrollToRegId={scrollToRegId}
               clearScroll={() => setScrollToRegId(null)}
               setRegPlayer={setRegPlayer}
-              setRegLesson={setRegLesson}
+              toggleRegLesson={toggleRegLesson}
+              removeRegLesson={removeRegLesson}
               removeRegistration={removeRegistration}
               addAdult={addAdult}
               addChild={addChild}
@@ -590,11 +640,13 @@ function PlayersAndLessonsStep(props: {
   registrations: Registration[];
   lessons: Lesson[];
   lessonsLoading: boolean;
+  activeWeekStart: Date | null;
   invalidRegIds: Set<string>;
   scrollToRegId: string | null;
   clearScroll: () => void;
   setRegPlayer: (id: string, patch: Partial<Registration["player"]>) => void;
-  setRegLesson: (id: string, lessonId: string) => void;
+  toggleRegLesson: (id: string, lessonId: string) => void;
+  removeRegLesson: (id: string, lessonId: string) => void;
   removeRegistration: (id: string) => void;
   addAdult: () => void;
   addChild: () => void;
@@ -602,20 +654,19 @@ function PlayersAndLessonsStep(props: {
   onNext: () => void;
   onEditAccount: () => void;
 }) {
-  const { accountHolder, registrations, lessons } = props;
+  const { accountHolder, registrations, lessons, activeWeekStart } = props;
   const accountHolderReg = registrations.find((r) => r.isAccountHolder);
   const others = registrations.filter((r) => !r.isAccountHolder);
-  let adultCount = 1; // account holder is Adult 1
+  let adultCount = 1;
   let childCount = 0;
 
   return (
     <div className="space-y-5">
       <div>
         <h2 className="text-xl font-bold">Players & Lessons</h2>
-        <p className="text-sm text-muted-foreground">Each participant picks their own lesson. Add as many as you'd like.</p>
+        <p className="text-sm text-muted-foreground">Each participant can pick one or more lessons. Add as many participants as you'd like.</p>
       </div>
 
-      {/* Account holder summary */}
       <div className="rounded-lg border border-primary/30 bg-primary/5 p-4">
         <div className="flex items-start justify-between gap-3">
           <div className="text-sm">
@@ -638,26 +689,26 @@ function PlayersAndLessonsStep(props: {
         </div>
       </div>
 
-      {/* Account holder's lesson selector */}
       {accountHolderReg && (
         <ParticipantCard
           reg={accountHolderReg}
           header={`Adult 1 (You)`}
           lessons={lessons}
           lessonsLoading={props.lessonsLoading}
+          activeWeekStart={activeWeekStart}
           showRemove={false}
           invalid={props.invalidRegIds.has(accountHolderReg.id)}
           scrollHere={props.scrollToRegId === accountHolderReg.id}
           onMounted={props.clearScroll}
           setRegPlayer={props.setRegPlayer}
-          setRegLesson={props.setRegLesson}
+          toggleRegLesson={props.toggleRegLesson}
+          removeRegLesson={props.removeRegLesson}
           onRemove={() => {}}
           accountHolderName={`${accountHolder.firstName} ${accountHolder.lastName}`}
           hidePlayerFields
         />
       )}
 
-      {/* Add More Participants */}
       <div className="rounded-lg border border-dashed border-border bg-secondary/30 p-4">
         <div className="text-sm font-semibold">Add More Participants</div>
         <p className="text-xs text-muted-foreground">Up to {Math.max(0, 100 - registrations.length)} more.</p>
@@ -671,7 +722,6 @@ function PlayersAndLessonsStep(props: {
         </div>
       </div>
 
-      {/* Other participant cards */}
       <div className="space-y-3">
         {others.map((r) => {
           const header =
@@ -685,12 +735,14 @@ function PlayersAndLessonsStep(props: {
               header={header}
               lessons={lessons}
               lessonsLoading={props.lessonsLoading}
+              activeWeekStart={activeWeekStart}
               showRemove
               invalid={props.invalidRegIds.has(r.id)}
               scrollHere={props.scrollToRegId === r.id}
               onMounted={props.clearScroll}
               setRegPlayer={props.setRegPlayer}
-              setRegLesson={props.setRegLesson}
+              toggleRegLesson={props.toggleRegLesson}
+              removeRegLesson={props.removeRegLesson}
               onRemove={() => props.removeRegistration(r.id)}
               accountHolderName={`${accountHolder.firstName} ${accountHolder.lastName}`}
             />
@@ -708,12 +760,14 @@ function ParticipantCard(props: {
   header: string;
   lessons: Lesson[];
   lessonsLoading: boolean;
+  activeWeekStart: Date | null;
   showRemove: boolean;
   invalid: boolean;
   scrollHere: boolean;
   onMounted: () => void;
   setRegPlayer: (id: string, patch: Partial<Registration["player"]>) => void;
-  setRegLesson: (id: string, lessonId: string) => void;
+  toggleRegLesson: (id: string, lessonId: string) => void;
+  removeRegLesson: (id: string, lessonId: string) => void;
   onRemove: () => void;
   accountHolderName: string;
   hidePlayerFields?: boolean;
@@ -735,6 +789,9 @@ function ParticipantCard(props: {
     setRemoving(true);
     setTimeout(() => props.onRemove(), 180);
   }
+
+  const selectedIds = useMemo(() => new Set(reg.lessons.map((l) => l.lessonId)), [reg.lessons]);
+  const firstName = reg.player.firstName.trim() || "Participant";
 
   return (
     <div
@@ -821,9 +878,10 @@ function ParticipantCard(props: {
           )}
         </div>
       )}
-      {/* Lesson selector — week + calendar browser */}
+
+      {/* Lesson selector — multi-select, locked to admin active week */}
       <div className="mt-3 space-y-2">
-        <Label>Lesson *</Label>
+        <Label>Lessons * (select one or more)</Label>
         {props.lessonsLoading ? (
           <p className="text-xs text-muted-foreground">Loading lessons…</p>
         ) : props.lessons.length === 0 ? (
@@ -831,25 +889,118 @@ function ParticipantCard(props: {
         ) : (
           <LessonBrowser
             lessons={props.lessons}
-            selectedId={reg.lessonId}
-            onSelect={(id) => props.setRegLesson(reg.id, id)}
-            onClear={() => props.setRegLesson(reg.id, "")}
+            activeWeekStart={props.activeWeekStart}
+            selectedIds={selectedIds}
+            onToggle={(id) => props.toggleRegLesson(reg.id, id)}
           />
         )}
-        {reg.lessonId && (
-          <p className="text-[11px] text-muted-foreground">
-            Deposit: <span className="font-semibold text-foreground">${reg.depositAmount.toFixed(2)}</span>
-          </p>
+
+        {reg.lessons.length > 0 && (
+          <SelectedLessonsSummary
+            reg={reg}
+            participantFirstName={firstName}
+            onRemove={(lessonId) => props.removeRegLesson(reg.id, lessonId)}
+          />
         )}
       </div>
-
-
 
       {props.invalid && (
         <p className="mt-3 text-xs font-medium text-destructive">
           Please complete all required fields to continue.
         </p>
       )}
+    </div>
+  );
+}
+
+function SelectedLessonsSummary({
+  reg,
+  participantFirstName,
+  onRemove,
+}: {
+  reg: Registration;
+  participantFirstName: string;
+  onRemove: (lessonId: string) => void;
+}) {
+  const [showGoogle, setShowGoogle] = useState(false);
+  return (
+    <div className="mt-2 rounded-lg border border-green-600/40 bg-green-50/60 dark:bg-green-950/20 p-3 space-y-2">
+      <div className="text-xs font-semibold text-green-800 dark:text-green-300">Selected Lessons:</div>
+      <ul className="space-y-1.5">
+        {reg.lessons.map((l) => {
+          const d = new Date(l.lessonDateTime);
+          const e = new Date(l.lessonEndTime);
+          const dateStr = d.toLocaleDateString(undefined, { weekday: "short", month: "short", day: "numeric" });
+          const timeRange = `${d.toLocaleTimeString(undefined, { hour: "numeric", minute: "2-digit" })}–${e.toLocaleTimeString(undefined, { hour: "numeric", minute: "2-digit" })}`;
+          return (
+            <li key={l.lessonId} className="flex items-start gap-2 text-xs">
+              <Check className="h-3.5 w-3.5 mt-0.5 flex-shrink-0 text-green-700 dark:text-green-400" />
+              <span className="flex-1">
+                <span className="font-medium">{l.lessonName}</span>{" "}
+                <span className="text-muted-foreground">· {dateStr} · {timeRange} · ${l.depositAmount.toFixed(0)}</span>
+              </span>
+              <button
+                type="button"
+                onClick={() => onRemove(l.lessonId)}
+                className="text-destructive hover:underline font-medium px-1"
+                aria-label={`Remove ${l.lessonName}`}
+              >
+                ×
+              </button>
+            </li>
+          );
+        })}
+      </ul>
+      <p className="text-[11px] text-muted-foreground italic">+ Add more lessons above</p>
+      <div className="flex items-center justify-between pt-1 border-t border-green-600/20">
+        <span className="text-xs font-semibold">Deposit:</span>
+        <span className="text-sm font-bold text-green-700 dark:text-green-400">${reg.participantSubtotal.toFixed(2)}</span>
+      </div>
+
+      <div className="pt-2 space-y-2">
+        <Button
+          type="button"
+          variant="outline"
+          size="sm"
+          className="w-full border-green-600 text-green-700 hover:bg-green-50 dark:text-green-400 dark:hover:bg-green-950/30"
+          onClick={() => downloadIcs(reg, participantFirstName)}
+        >
+          <Download className="mr-1 h-3.5 w-3.5" /> 📅 Add to My Calendar
+        </Button>
+        <div className="text-[11px] text-muted-foreground">Or add directly to:</div>
+        <div className="flex flex-wrap gap-1.5">
+          <Button type="button" variant="outline" size="sm" className="text-xs h-7" onClick={() => downloadIcs(reg, participantFirstName)}>
+            🍎 Apple Calendar
+          </Button>
+          <Button type="button" variant="outline" size="sm" className="text-xs h-7" onClick={() => setShowGoogle((v) => !v)}>
+            📅 Google Calendar
+          </Button>
+          <Button type="button" variant="outline" size="sm" className="text-xs h-7" onClick={() => downloadIcs(reg, participantFirstName)}>
+            📆 Outlook
+          </Button>
+        </div>
+        {showGoogle && (
+          <div className="rounded-md border border-border bg-background p-2 text-xs space-y-1">
+            <div className="font-semibold">Add each lesson to Google Calendar:</div>
+            {reg.lessons.map((l) => {
+              const url = googleCalendarUrl(l, participantFirstName);
+              const d = new Date(l.lessonDateTime);
+              const dateStr = d.toLocaleDateString(undefined, { month: "short", day: "numeric" });
+              return (
+                <a
+                  key={l.lessonId}
+                  href={url}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="block text-primary hover:underline"
+                >
+                  + {l.lessonName} – {dateStr}
+                </a>
+              );
+            })}
+          </div>
+        )}
+      </div>
     </div>
   );
 }
@@ -899,7 +1050,7 @@ function ReviewStep(props: {
   onEdit: (id: string) => void;
   onNext: () => void;
 }) {
-  const total = props.registrations.reduce((s, r) => s + r.depositAmount, 0);
+  const total = props.registrations.reduce((s, r) => s + r.participantSubtotal, 0);
   let adultCount = 0;
   let childCount = 0;
 
@@ -918,12 +1069,6 @@ function ReviewStep(props: {
             r.registrantType === "adult"
               ? r.isAccountHolder ? "Adult 1 (You)" : `Adult ${adultCount}`
               : `Child ${childCount}`;
-          const lessonLabel = r.lessonDateTime
-            ? new Date(r.lessonDateTime).toLocaleString(undefined, {
-                weekday: "short", month: "short", day: "numeric",
-                hour: "numeric", minute: "2-digit",
-              })
-            : "—";
           return (
             <div key={r.id} className="rounded-lg border border-border bg-background p-4">
               <div className="flex items-start justify-between gap-3">
@@ -954,8 +1099,27 @@ function ReviewStep(props: {
                   </div>
                 </>
               )}
-              <div className="mt-1 text-xs text-muted-foreground">Lesson: {lessonLabel}</div>
-              <div className="mt-1 text-sm font-semibold">Deposit: ${r.depositAmount.toFixed(2)}</div>
+              <div className="mt-2 text-xs font-semibold text-muted-foreground">
+                Lessons registered:
+              </div>
+              {r.lessons.length === 0 ? (
+                <div className="text-xs text-destructive">No lessons selected.</div>
+              ) : (
+                <ul className="mt-1 space-y-0.5">
+                  {r.lessons.map((l) => {
+                    const d = new Date(l.lessonDateTime);
+                    const e = new Date(l.lessonEndTime);
+                    const dateStr = d.toLocaleDateString(undefined, { weekday: "short", month: "short", day: "numeric" });
+                    const timeRange = `${d.toLocaleTimeString(undefined, { hour: "numeric", minute: "2-digit" })}–${e.toLocaleTimeString(undefined, { hour: "numeric", minute: "2-digit" })}`;
+                    return (
+                      <li key={l.lessonId} className="text-xs">
+                        • {l.lessonName} · {dateStr} · {timeRange} · ${l.depositAmount.toFixed(0)}
+                      </li>
+                    );
+                  })}
+                </ul>
+              )}
+              <div className="mt-2 text-sm font-semibold">Subtotal: ${r.participantSubtotal.toFixed(2)}</div>
             </div>
           );
         })}
@@ -1064,15 +1228,13 @@ function PaymentStep(props: {
   const [paid, setPaid] = useState(false);
   const [selectedMethod, setSelectedMethod] = useState<PaymentMethod | null>(null);
 
-  const total = props.registrations.reduce((s, r) => s + r.depositAmount, 0);
+  const total = props.registrations.reduce((s, r) => s + r.participantSubtotal, 0);
 
-  // Memo: "First1, First2, First3 – earliestLessonDate"
+  // Memo: "First1, First2 – earliestLessonDate" across all participants' all lessons
   const memoInfo = useMemo(() => {
     const names = props.registrations.map((r) => r.player.firstName.trim()).filter(Boolean);
-    const earliest = props.registrations
-      .map((r) => r.lessonDateTime)
-      .filter(Boolean)
-      .sort()[0];
+    const allDates = props.registrations.flatMap((r) => r.lessons.map((l) => l.lessonDateTime)).filter(Boolean).sort();
+    const earliest = allDates[0];
     const dateStr = earliest
       ? new Date(earliest).toLocaleDateString(undefined, { month: "long", day: "numeric" })
       : "";
@@ -1369,68 +1531,47 @@ function fmtWeekRange(start: Date): string {
 
 function LessonBrowser(props: {
   lessons: Lesson[];
-  selectedId: string;
-  onSelect: (id: string) => void;
-  onClear: () => void;
+  activeWeekStart: Date | null;
+  selectedIds: Set<string>;
+  onToggle: (id: string) => void;
 }) {
-  const { lessons, selectedId, onSelect, onClear } = props;
+  const { lessons, activeWeekStart, selectedIds, onToggle } = props;
   const [view, setView] = useState<"week" | "calendar">("week");
 
-  // Distinct sorted week starts that contain lessons
-  const weekStarts = useMemo(() => {
-    const set = new Map<number, Date>();
-    for (const l of lessons) {
-      const ws = startOfWeek(new Date(l.start_time));
-      set.set(ws.getTime(), ws);
-    }
-    return Array.from(set.values()).sort((a, b) => a.getTime() - b.getTime());
-  }, [lessons]);
+  // Effective active week: admin-set, else current week containing earliest lesson
+  const effectiveWeek = useMemo(() => {
+    if (activeWeekStart) return activeWeekStart;
+    if (lessons.length > 0) return startOfWeek(new Date(lessons[0].start_time));
+    return startOfWeek(new Date());
+  }, [activeWeekStart, lessons]);
 
-  // Initial week index: containing today, else first available
-  const initialIdx = useMemo(() => {
-    const todayWeek = startOfWeek(new Date()).getTime();
-    const idx = weekStarts.findIndex((w) => w.getTime() >= todayWeek);
-    return idx === -1 ? Math.max(0, weekStarts.length - 1) : idx;
-  }, [weekStarts]);
-  const [weekIdx, setWeekIdx] = useState<number>(initialIdx);
-  useEffect(() => { setWeekIdx(initialIdx); }, [initialIdx]);
+  const weekEnd = useMemo(() => addDays(effectiveWeek, 7), [effectiveWeek]);
 
-  // Calendar state
-  const initialMonth = useMemo(() => {
-    const first = lessons[0] ? new Date(lessons[0].start_time) : new Date();
-    return new Date(first.getFullYear(), first.getMonth(), 1);
-  }, [lessons]);
-  const [calMonth, setCalMonth] = useState<Date>(initialMonth);
+  const weekLessons = useMemo(
+    () =>
+      lessons
+        .filter((l) => {
+          const t = new Date(l.start_time).getTime();
+          return t >= effectiveWeek.getTime() && t < weekEnd.getTime();
+        })
+        .sort((a, b) => new Date(a.start_time).getTime() - new Date(b.start_time).getTime()),
+    [lessons, effectiveWeek, weekEnd],
+  );
+
+  const weekRangeLabel = useMemo(() => {
+    const end = addDays(effectiveWeek, 6);
+    const s = effectiveWeek.toLocaleDateString(undefined, { month: "short", day: "numeric" });
+    const e = end.toLocaleDateString(undefined, { month: "short", day: "numeric", year: "numeric" });
+    return `${s} – ${e}`;
+  }, [effectiveWeek]);
+
+  // Calendar view month state
+  const [calMonth, setCalMonth] = useState<Date>(() => new Date(effectiveWeek.getFullYear(), effectiveWeek.getMonth(), 1));
   const [selectedDay, setSelectedDay] = useState<Date | null>(null);
-
-  const selectedLesson = lessons.find((l) => l.id === selectedId);
-
-  // Selected confirmation line
-  if (selectedLesson) {
-    const d = new Date(selectedLesson.start_time);
-    const e = new Date(selectedLesson.end_time);
-    const dateStr = d.toLocaleDateString(undefined, { weekday: "short", month: "short", day: "numeric" });
-    const timeRange = `${d.toLocaleTimeString(undefined, { hour: "numeric", minute: "2-digit" })}–${e.toLocaleTimeString(undefined, { hour: "numeric", minute: "2-digit" })}`;
-    return (
-      <div className="rounded-lg border-2 border-green-600 bg-green-50 dark:bg-green-950/30 p-3">
-        <div className="flex items-start gap-2">
-          <Check className="h-4 w-4 mt-0.5 flex-shrink-0 text-green-700 dark:text-green-400" />
-          <div className="flex-1 text-sm">
-            <span className="font-medium text-foreground">Selected:</span>{" "}
-            <span className="text-foreground">{selectedLesson.title}</span>
-            <span className="text-muted-foreground"> · {dateStr} · {timeRange} · ${Number(selectedLesson.price).toFixed(0)}</span>
-          </div>
-          <button
-            type="button"
-            onClick={onClear}
-            className="text-xs font-medium text-green-700 dark:text-green-400 hover:underline"
-          >
-            Change
-          </button>
-        </div>
-      </div>
-    );
-  }
+  useEffect(() => {
+    setCalMonth(new Date(effectiveWeek.getFullYear(), effectiveWeek.getMonth(), 1));
+    setSelectedDay(null);
+  }, [effectiveWeek]);
 
   return (
     <div className="space-y-3">
@@ -1452,29 +1593,31 @@ function LessonBrowser(props: {
         </button>
       </div>
 
-      {view === "week"
-        ? <WeekView
-            lessons={lessons}
-            weekStarts={weekStarts}
-            weekIdx={weekIdx}
-            setWeekIdx={setWeekIdx}
-            selectedId={selectedId}
-            onSelect={onSelect}
-          />
-        : <CalendarView
-            lessons={lessons}
-            calMonth={calMonth}
-            setCalMonth={setCalMonth}
-            selectedDay={selectedDay}
-            setSelectedDay={setSelectedDay}
-            selectedId={selectedId}
-            onSelect={onSelect}
-          />}
+      {/* Active week label (read-only) */}
+      <div className="rounded-md border border-border bg-secondary/30 px-3 py-2 text-xs font-medium text-foreground text-center">
+        Lessons available for the week of {weekRangeLabel}
+      </div>
+
+      {view === "week" ? (
+        <WeekView weekLessons={weekLessons} selectedIds={selectedIds} onToggle={onToggle} />
+      ) : (
+        <CalendarView
+          lessons={lessons}
+          activeWeekStart={effectiveWeek}
+          weekEnd={weekEnd}
+          calMonth={calMonth}
+          setCalMonth={setCalMonth}
+          selectedDay={selectedDay}
+          setSelectedDay={setSelectedDay}
+          selectedIds={selectedIds}
+          onToggle={onToggle}
+        />
+      )}
     </div>
   );
 }
 
-function LessonCard(props: { lesson: Lesson; selected: boolean; onSelect: (id: string) => void }) {
+function LessonCard(props: { lesson: Lesson; selected: boolean; onToggle: (id: string) => void }) {
   const l = props.lesson;
   const isFull = l.booked >= l.capacity;
   const d = new Date(l.start_time);
@@ -1486,7 +1629,7 @@ function LessonCard(props: { lesson: Lesson; selected: boolean; onSelect: (id: s
     <button
       type="button"
       disabled={isFull && !props.selected}
-      onClick={() => props.onSelect(l.id)}
+      onClick={() => props.onToggle(l.id)}
       className={`relative text-left rounded-lg border-2 p-3 transition-all ${
         props.selected
           ? "border-green-600 bg-green-50 dark:bg-green-950/30 ring-2 ring-green-600/30"
@@ -1509,90 +1652,39 @@ function LessonCard(props: { lesson: Lesson; selected: boolean; onSelect: (id: s
 }
 
 function WeekView(props: {
-  lessons: Lesson[];
-  weekStarts: Date[];
-  weekIdx: number;
-  setWeekIdx: (n: number) => void;
-  selectedId: string;
-  onSelect: (id: string) => void;
+  weekLessons: Lesson[];
+  selectedIds: Set<string>;
+  onToggle: (id: string) => void;
 }) {
-  const { lessons, weekStarts, weekIdx, setWeekIdx } = props;
-  if (weekStarts.length === 0) return null;
-  const safeIdx = Math.min(Math.max(weekIdx, 0), weekStarts.length - 1);
-  const currentStart = weekStarts[safeIdx];
-  const currentEnd = addDays(currentStart, 7);
-  const weekLessons = lessons
-    .filter((l) => {
-      const t = new Date(l.start_time).getTime();
-      return t >= currentStart.getTime() && t < currentEnd.getTime();
-    })
-    .sort((a, b) => new Date(a.start_time).getTime() - new Date(b.start_time).getTime());
-
-  const canPrev = safeIdx > 0;
-  const canNext = safeIdx < weekStarts.length - 1;
-
-  // Swipe support
-  const touchX = useRef<number | null>(null);
-  function onTouchStart(e: React.TouchEvent) { touchX.current = e.touches[0].clientX; }
-  function onTouchEnd(e: React.TouchEvent) {
-    if (touchX.current == null) return;
-    const dx = e.changedTouches[0].clientX - touchX.current;
-    if (dx > 50 && canPrev) setWeekIdx(safeIdx - 1);
-    else if (dx < -50 && canNext) setWeekIdx(safeIdx + 1);
-    touchX.current = null;
+  if (props.weekLessons.length === 0) {
+    return (
+      <p className="rounded-md border border-dashed border-border p-4 text-center text-xs text-muted-foreground">
+        No lessons available this week.
+      </p>
+    );
   }
-
   return (
-    <div className="space-y-2">
-      <div className="flex items-center justify-between gap-2 rounded-md border border-border bg-secondary/30 px-2 py-1.5">
-        <button
-          type="button"
-          disabled={!canPrev}
-          onClick={() => setWeekIdx(safeIdx - 1)}
-          className="px-2 py-1 text-xs font-medium text-foreground hover:bg-background rounded disabled:opacity-40 disabled:cursor-not-allowed"
-        >
-          ← prev
-        </button>
-        <div className="text-xs font-medium text-foreground">{fmtWeekRange(currentStart)}</div>
-        <button
-          type="button"
-          disabled={!canNext}
-          onClick={() => setWeekIdx(safeIdx + 1)}
-          className="px-2 py-1 text-xs font-medium text-foreground hover:bg-background rounded disabled:opacity-40 disabled:cursor-not-allowed"
-        >
-          next →
-        </button>
-      </div>
-
-      <div onTouchStart={onTouchStart} onTouchEnd={onTouchEnd}>
-        {weekLessons.length === 0 ? (
-          <p className="rounded-md border border-dashed border-border p-4 text-center text-xs text-muted-foreground">
-            No lessons available this week.
-          </p>
-        ) : (
-          <div className="grid gap-2 sm:grid-cols-2">
-            {weekLessons.map((l) => (
-              <LessonCard key={l.id} lesson={l} selected={props.selectedId === l.id} onSelect={props.onSelect} />
-            ))}
-          </div>
-        )}
-      </div>
+    <div className="grid gap-2 sm:grid-cols-2">
+      {props.weekLessons.map((l) => (
+        <LessonCard key={l.id} lesson={l} selected={props.selectedIds.has(l.id)} onToggle={props.onToggle} />
+      ))}
     </div>
   );
 }
 
 function CalendarView(props: {
   lessons: Lesson[];
+  activeWeekStart: Date;
+  weekEnd: Date;
   calMonth: Date;
   setCalMonth: (d: Date) => void;
   selectedDay: Date | null;
   setSelectedDay: (d: Date | null) => void;
-  selectedId: string;
-  onSelect: (id: string) => void;
+  selectedIds: Set<string>;
+  onToggle: (id: string) => void;
 }) {
-  const { lessons, calMonth, setCalMonth, selectedDay, setSelectedDay } = props;
+  const { lessons, activeWeekStart, weekEnd, calMonth, setCalMonth, selectedDay, setSelectedDay } = props;
 
-  // Days in month with lessons
   const lessonsByDay = useMemo(() => {
     const map = new Map<string, Lesson[]>();
     for (const l of lessons) {
@@ -1607,20 +1699,7 @@ function CalendarView(props: {
 
   const monthLabel = calMonth.toLocaleDateString(undefined, { month: "long", year: "numeric" });
   const firstDay = new Date(calMonth.getFullYear(), calMonth.getMonth(), 1);
-  const daysInMonth = new Date(calMonth.getFullYear(), calMonth.getMonth() + 1, 0).getDate();
   const gridStart = addDays(firstDay, -firstDay.getDay());
-
-  // Disable left arrow if no earlier lessons exist
-  const earliest = useMemo(() => {
-    if (lessons.length === 0) return null;
-    return lessons.reduce((min, l) => {
-      const t = new Date(l.start_time);
-      return t < min ? t : min;
-    }, new Date(lessons[0].start_time));
-  }, [lessons]);
-  const canPrevMonth = earliest
-    ? new Date(earliest.getFullYear(), earliest.getMonth(), 1) < calMonth
-    : false;
 
   function shiftMonth(delta: number) {
     setSelectedDay(null);
@@ -1631,13 +1710,16 @@ function CalendarView(props: {
     return lessonsByDay.get(`${d.getFullYear()}-${d.getMonth()}-${d.getDate()}`) ?? [];
   }
 
+  function inActiveWeek(d: Date): boolean {
+    const t = new Date(d.getFullYear(), d.getMonth(), d.getDate()).getTime();
+    return t >= activeWeekStart.getTime() && t < weekEnd.getTime();
+  }
+
   function handleDayClick(d: Date) {
+    if (!inActiveWeek(d)) return;
     const lns = dayLessons(d);
     if (lns.length === 0) return;
     setSelectedDay(d);
-    if (lns.length === 1) {
-      props.onSelect(lns[0].id);
-    }
   }
 
   const weekdays = ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"];
@@ -1651,9 +1733,8 @@ function CalendarView(props: {
       <div className="flex items-center justify-between gap-2 rounded-md border border-border bg-secondary/30 px-2 py-1.5">
         <button
           type="button"
-          disabled={!canPrevMonth}
           onClick={() => shiftMonth(-1)}
-          className="px-2 py-1 text-xs font-medium hover:bg-background rounded disabled:opacity-40 disabled:cursor-not-allowed"
+          className="px-2 py-1 text-xs font-medium hover:bg-background rounded"
         >
           ←
         </button>
@@ -1675,7 +1756,8 @@ function CalendarView(props: {
           {cells.map((d, i) => {
             const inMonth = d.getMonth() === calMonth.getMonth();
             const lns = dayLessons(d);
-            const hasLessons = lns.length > 0 && inMonth;
+            const inWeek = inActiveWeek(d);
+            const hasLessons = lns.length > 0 && inMonth && inWeek;
             const isSelected = selectedDay && sameDay(d, selectedDay);
             return (
               <button
@@ -1685,7 +1767,7 @@ function CalendarView(props: {
                 onClick={() => handleDayClick(d)}
                 className={`relative aspect-square flex items-center justify-center text-xs rounded transition-colors ${
                   !inMonth ? "text-muted-foreground/30" :
-                  !hasLessons ? "text-muted-foreground/50 cursor-not-allowed" :
+                  !hasLessons ? "text-muted-foreground/40 cursor-not-allowed" :
                   isSelected ? "bg-green-600 text-white font-semibold" :
                   "text-foreground hover:bg-secondary"
                 }`}
@@ -1707,14 +1789,98 @@ function CalendarView(props: {
           </div>
           <div className="grid gap-2 sm:grid-cols-2">
             {selectedLessons.map((l) => (
-              <LessonCard key={l.id} lesson={l} selected={props.selectedId === l.id} onSelect={props.onSelect} />
+              <LessonCard key={l.id} lesson={l} selected={props.selectedIds.has(l.id)} onToggle={props.onToggle} />
             ))}
           </div>
         </div>
       )}
-
-      {daysInMonth === 0 && null}
     </div>
   );
+}
+
+// ============== ICS Calendar download helpers ==============
+
+const LESSON_LOCATION = "Fairground Park, Eunice, Louisiana";
+const LESSON_CONTACT_EMAIL = "alysemcormier@gmail.com";
+const LESSON_CONTACT_PHONE = "337-945-2908";
+
+function pad2(n: number) { return n < 10 ? `0${n}` : `${n}`; }
+function toIcsUtc(iso: string): string {
+  const d = new Date(iso);
+  return `${d.getUTCFullYear()}${pad2(d.getUTCMonth() + 1)}${pad2(d.getUTCDate())}T${pad2(d.getUTCHours())}${pad2(d.getUTCMinutes())}${pad2(d.getUTCSeconds())}Z`;
+}
+function escIcs(s: string): string {
+  return s.replace(/\\/g, "\\\\").replace(/\n/g, "\\n").replace(/,/g, "\\,").replace(/;/g, "\\;");
+}
+
+function buildIcs(reg: Registration, firstName: string): string {
+  const lines: string[] = [
+    "BEGIN:VCALENDAR",
+    "VERSION:2.0",
+    "PRODID:-//2026 Tennis Lessons//EN",
+    "CALSCALE:GREGORIAN",
+  ];
+  const dtstamp = toIcsUtc(new Date().toISOString());
+  const description = escIcs(
+    `Tennis lesson at ${LESSON_LOCATION}.\n\n` +
+    `Cancellation Policy: Cancellations must be made more than 24 hours in advance. Late cancellations or no-shows forfeit the deposit as a 50% fee.\n\n` +
+    `Questions? Email: ${LESSON_CONTACT_EMAIL}\nPhone: ${LESSON_CONTACT_PHONE}`,
+  );
+  for (const l of reg.lessons) {
+    const uid = `${l.lessonId}-${reg.id}@2026tennislessons`;
+    lines.push(
+      "BEGIN:VEVENT",
+      `UID:${uid}`,
+      `DTSTAMP:${dtstamp}`,
+      `DTSTART:${toIcsUtc(l.lessonDateTime)}`,
+      `DTEND:${toIcsUtc(l.lessonEndTime)}`,
+      `SUMMARY:${escIcs(`🎾 Tennis Lesson – ${firstName} – 2026 Tennis Lessons`)}`,
+      `LOCATION:${escIcs(LESSON_LOCATION)}`,
+      `DESCRIPTION:${description}`,
+      "BEGIN:VALARM",
+      "ACTION:DISPLAY",
+      "TRIGGER:-PT48H",
+      "DESCRIPTION:Your tennis lesson is in 48 hours. Cancel before the 24-hour cutoff to avoid a fee.",
+      "END:VALARM",
+      "BEGIN:VALARM",
+      "ACTION:DISPLAY",
+      "TRIGGER:-PT24H",
+      "DESCRIPTION:Cancellation window is now closed for tomorrow's lesson. See you at Fairground Park!",
+      "END:VALARM",
+      "END:VEVENT",
+    );
+  }
+  lines.push("END:VCALENDAR");
+  return lines.join("\r\n");
+}
+
+function downloadIcs(reg: Registration, firstName: string) {
+  const ics = buildIcs(reg, firstName);
+  const blob = new Blob([ics], { type: "text/calendar;charset=utf-8" });
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement("a");
+  a.href = url;
+  a.download = `tennis-lessons-${firstName.toLowerCase().replace(/\s+/g, "-") || "participant"}.ics`;
+  document.body.appendChild(a);
+  a.click();
+  document.body.removeChild(a);
+  setTimeout(() => URL.revokeObjectURL(url), 1000);
+}
+
+function googleCalendarUrl(l: SelectedLesson, firstName: string): string {
+  const fmt = (iso: string) => toIcsUtc(iso);
+  const text = `🎾 Tennis Lesson – ${firstName} – 2026 Tennis Lessons`;
+  const details =
+    `Tennis lesson at ${LESSON_LOCATION}.\n\n` +
+    `Cancellation Policy: Cancellations must be made more than 24 hours in advance. Late cancellations or no-shows forfeit the deposit as a 50% fee.\n\n` +
+    `Questions? Email: ${LESSON_CONTACT_EMAIL}\nPhone: ${LESSON_CONTACT_PHONE}`;
+  const params = new URLSearchParams({
+    action: "TEMPLATE",
+    text,
+    dates: `${fmt(l.lessonDateTime)}/${fmt(l.lessonEndTime)}`,
+    details,
+    location: LESSON_LOCATION,
+  });
+  return `https://calendar.google.com/calendar/render?${params.toString()}`;
 }
 
