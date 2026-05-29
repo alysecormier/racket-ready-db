@@ -1441,11 +1441,14 @@ function PaymentStep(props: {
   registrations: Registration[];
   accountHolder: AccountHolderInfo;
   onBack: () => void;
-  onPaid: (paymentMethod: string) => Promise<void>;
+  onPaid: (paymentMethod: string) => Promise<boolean>;
   onDone: () => void;
 }) {
   const [paid, setPaid] = useState(false);
+  const [saving, setSaving] = useState(false);
+  const [saveError, setSaveError] = useState<string | null>(null);
   const [selectedMethod, setSelectedMethod] = useState<PaymentMethod | null>(null);
+  const navigate = useNavigate();
 
   const total = props.registrations.reduce((s, r) => s + r.participantSubtotal, 0);
 
@@ -1459,6 +1462,13 @@ function PaymentStep(props: {
       : "";
     return { names, dateStr, memo: `${names.join(", ")} – ${dateStr}` };
   }, [props.registrations]);
+
+  function downloadAllSessionIcs() {
+    for (const r of props.registrations) {
+      if (r.lessons.length === 0) continue;
+      downloadIcs(r, r.player.firstName || props.accountHolder.firstName || "participant");
+    }
+  }
 
   return (
     <div className="space-y-5">
@@ -1492,23 +1502,69 @@ function PaymentStep(props: {
       </div>
 
       {paid ? (
-        <div className="rounded-lg border border-primary/40 bg-primary/5 p-8 text-center">
+        <div className="rounded-lg border-2 border-green-600/40 bg-green-50 p-8 text-center dark:bg-green-950/20">
           <div className="mx-auto text-5xl">🎾</div>
-          <div className="mt-3 text-xl font-bold">You're all set!</div>
-          <p className="mt-2 text-sm text-muted-foreground">
-            Welcome to 2026 Tennis Lessons. We'll be in touch shortly with next steps.
+          <div className="mt-3 text-2xl font-bold">You're Registered!</div>
+          <p className="mt-3 text-sm text-foreground">
+            Thank you, <span className="font-semibold">{props.accountHolder.firstName || "friend"}</span>. Your lesson registration has been received. A confirmation email has been sent to{" "}
+            <span className="font-semibold">{props.accountHolder.email}</span>.
           </p>
-          <Button onClick={props.onDone} className="mt-5">Done</Button>
+          <p className="mt-3 text-sm text-muted-foreground">
+            Your deposit is pending verification. You will receive a second email once confirmed.
+          </p>
+          <div className="mt-6 flex flex-col gap-2 sm:flex-row sm:justify-center">
+            <Button
+              onClick={() => navigate({ to: "/dashboard" })}
+              className="bg-green-600 text-white hover:bg-green-700"
+            >
+              View My Lessons
+            </Button>
+            <Button onClick={downloadAllSessionIcs} variant="outline">
+              <Download className="mr-1 h-4 w-4" /> Add Lessons to Calendar
+            </Button>
+          </div>
         </div>
       ) : selectedMethod ? (
-        <PaymentConfirm
-          method={selectedMethod}
-          depositAmount={total}
-          memo={memoInfo.memo}
-          memoNames={memoInfo.names}
-          memoDate={memoInfo.dateStr}
-          onConfirm={async () => { await props.onPaid(selectedMethod!.label); setPaid(true); }}
-          onBack={() => setSelectedMethod(null)}
+        <>
+          <PaymentConfirm
+            method={selectedMethod}
+            depositAmount={total}
+            memo={memoInfo.memo}
+            memoNames={memoInfo.names}
+            memoDate={memoInfo.dateStr}
+            saving={saving}
+            onConfirm={async () => {
+              setSaveError(null);
+              setSaving(true);
+              const ok = await props.onPaid(selectedMethod!.label);
+              setSaving(false);
+              if (!ok) {
+                setSaveError("Something went wrong saving your registration. Please try again or contact alysemcormier@gmail.com");
+                return;
+              }
+              setPaid(true);
+            }}
+            onBack={() => setSelectedMethod(null)}
+          />
+          {saveError && (
+            <div className="rounded-md border border-destructive/40 bg-destructive/10 p-3 text-sm text-destructive">
+              {saveError}
+            </div>
+          )}
+        </>
+      ) : (
+        <PaymentMethodPicker onSelect={setSelectedMethod} />
+      )}
+
+      {!paid && !selectedMethod && (
+        <Button onClick={props.onBack} variant="ghost" className="w-full">
+          ← Back to review
+        </Button>
+      )}
+    </div>
+  );
+}
+
         />
       ) : (
         <PaymentMethodPicker onSelect={setSelectedMethod} />
