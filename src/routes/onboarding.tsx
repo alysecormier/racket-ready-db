@@ -354,7 +354,7 @@ function OnboardingPage() {
           <div className="mb-3 inline-flex h-12 w-12 items-center justify-center rounded-full bg-primary text-primary-foreground shadow-lg">
             <span className="text-2xl">🎾</span>
           </div>
-          <h1 className="text-2xl font-bold tracking-tight sm:text-3xl">Join Ace Tennis Academy</h1>
+          <h1 className="text-2xl font-bold tracking-tight sm:text-3xl">Welcome to 2026 Tennis Lessons</h1>
           <p className="mt-1 text-sm text-muted-foreground">Get court-ready in a few quick steps</p>
         </header>
 
