@@ -993,6 +993,7 @@ function PaymentStep(props: {
   const navigate = useNavigate();
   const [paid, setPaid] = useState(false);
   const [stayForMatchPlay, setStayForMatchPlay] = useState(false);
+  const [selectedMethod, setSelectedMethod] = useState<PaymentMethod | null>(null);
 
   const items = props.lessonCart
     .map((item) => {
