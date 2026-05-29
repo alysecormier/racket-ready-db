@@ -342,23 +342,24 @@ function OnboardingPage() {
     setRegistrations((rs) => rs.filter((r) => r.id !== id || r.isAccountHolder));
   }
 
+  function regMissingFields(r: Registration): boolean {
+    if (!r.isAccountHolder) {
+      if (!r.player.firstName.trim() || !r.player.lastName.trim()) return true;
+    }
+    if (r.registrantType === "junior") {
+      if (r.player.age === null || Number.isNaN(r.player.age) || r.player.age >= 18) return true;
+      if (!r.player.gender) return true;
+    }
+    if (!r.lessonId) return true;
+    return false;
+  }
+
   function validateRegistrations(): { ok: true } | { ok: false; firstInvalidId: string; msg: string } {
     for (const r of registrations) {
-      if (!r.player.firstName.trim() || !r.player.lastName.trim()) {
-        return { ok: false, firstInvalidId: r.id, msg: "Please complete all required fields to continue." };
+      if (r.registrantType === "junior" && r.player.age !== null && r.player.age >= 18) {
+        return { ok: false, firstInvalidId: r.id, msg: "This child appears to be 18 or older. Please use Add an Adult instead." };
       }
-      if (r.registrantType === "junior") {
-        if (r.player.age === null || Number.isNaN(r.player.age)) {
-          return { ok: false, firstInvalidId: r.id, msg: "Please complete all required fields to continue." };
-        }
-        if (r.player.age >= 18) {
-          return { ok: false, firstInvalidId: r.id, msg: "This child appears to be 18 or older. Please use Add an Adult instead." };
-        }
-        if (!r.player.gender) {
-          return { ok: false, firstInvalidId: r.id, msg: "Please complete all required fields to continue." };
-        }
-      }
-      if (!r.lessonId) {
+      if (regMissingFields(r)) {
         return { ok: false, firstInvalidId: r.id, msg: "Please complete all required fields to continue." };
       }
     }
@@ -367,9 +368,9 @@ function OnboardingPage() {
 
   function handleContinueFromPlayers() {
     if (registrations.length === 0) return;
+    setAttemptedContinue(true);
     const v = validateRegistrations();
     if (!v.ok) {
-      setInvalidRegId(v.firstInvalidId);
       setScrollToRegId(v.firstInvalidId);
       toast.error(v.msg);
       return;
