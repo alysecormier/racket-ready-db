@@ -9,7 +9,7 @@ import { Card } from "@/components/ui/card";
 import { toast } from "sonner";
 import { Toaster } from "@/components/ui/sonner";
 import { z } from "zod";
-import { CheckCircle2, AlertTriangle, CalendarDays, DollarSign, Plus, X, Pencil } from "lucide-react";
+import { CheckCircle2, AlertTriangle, CalendarDays, DollarSign, Plus, X, Pencil, Check } from "lucide-react";
 import { useServerFn } from "@tanstack/react-start";
 import { signWaiver } from "@/lib/waiver.functions";
 
@@ -124,7 +124,7 @@ function OnboardingPage() {
   // step 1 (players & lessons) — multi-participant cart
   const [registrations, setRegistrations] = useState<Registration[]>([]);
   const [scrollToRegId, setScrollToRegId] = useState<string | null>(null);
-  const [invalidRegId, setInvalidRegId] = useState<string | null>(null);
+  const [attemptedContinue, setAttemptedContinue] = useState(false);
 
   // step 2 (waiver)
   const [agreed, setAgreed] = useState(false);
@@ -264,7 +264,7 @@ function OnboardingPage() {
 
   // -------- Registration helpers --------
   function updateRegistration(id: string, patch: Partial<Registration> | ((r: Registration) => Partial<Registration>)) {
-    setInvalidRegId(null);
+    // live invalid computed in render
     setRegistrations((rs) =>
       rs.map((r) => {
         if (r.id !== id) return r;
@@ -275,14 +275,14 @@ function OnboardingPage() {
   }
 
   function setRegPlayer(id: string, patch: Partial<Registration["player"]>) {
-    setInvalidRegId(null);
+    // live invalid computed in render
     setRegistrations((rs) =>
       rs.map((r) => (r.id === id ? { ...r, player: { ...r.player, ...patch } } : r)),
     );
   }
 
   function setRegLesson(id: string, lessonId: string) {
-    setInvalidRegId(null);
+    // live invalid computed in render
     const lesson = lessons.find((l) => l.id === lessonId);
     setRegistrations((rs) =>
       rs.map((r) =>
@@ -342,23 +342,24 @@ function OnboardingPage() {
     setRegistrations((rs) => rs.filter((r) => r.id !== id || r.isAccountHolder));
   }
 
+  function regMissingFields(r: Registration): boolean {
+    if (!r.isAccountHolder) {
+      if (!r.player.firstName.trim() || !r.player.lastName.trim()) return true;
+    }
+    if (r.registrantType === "junior") {
+      if (r.player.age === null || Number.isNaN(r.player.age) || r.player.age >= 18) return true;
+      if (!r.player.gender) return true;
+    }
+    if (!r.lessonId) return true;
+    return false;
+  }
+
   function validateRegistrations(): { ok: true } | { ok: false; firstInvalidId: string; msg: string } {
     for (const r of registrations) {
-      if (!r.player.firstName.trim() || !r.player.lastName.trim()) {
-        return { ok: false, firstInvalidId: r.id, msg: "Please complete all required fields to continue." };
+      if (r.registrantType === "junior" && r.player.age !== null && r.player.age >= 18) {
+        return { ok: false, firstInvalidId: r.id, msg: "This child appears to be 18 or older. Please use Add an Adult instead." };
       }
-      if (r.registrantType === "junior") {
-        if (r.player.age === null || Number.isNaN(r.player.age)) {
-          return { ok: false, firstInvalidId: r.id, msg: "Please complete all required fields to continue." };
-        }
-        if (r.player.age >= 18) {
-          return { ok: false, firstInvalidId: r.id, msg: "This child appears to be 18 or older. Please use Add an Adult instead." };
-        }
-        if (!r.player.gender) {
-          return { ok: false, firstInvalidId: r.id, msg: "Please complete all required fields to continue." };
-        }
-      }
-      if (!r.lessonId) {
+      if (regMissingFields(r)) {
         return { ok: false, firstInvalidId: r.id, msg: "Please complete all required fields to continue." };
       }
     }
@@ -367,9 +368,9 @@ function OnboardingPage() {
 
   function handleContinueFromPlayers() {
     if (registrations.length === 0) return;
+    setAttemptedContinue(true);
     const v = validateRegistrations();
     if (!v.ok) {
-      setInvalidRegId(v.firstInvalidId);
       setScrollToRegId(v.firstInvalidId);
       toast.error(v.msg);
       return;
@@ -452,7 +453,7 @@ function OnboardingPage() {
               registrations={registrations}
               lessons={lessons}
               lessonsLoading={lessonsLoading}
-              invalidRegId={invalidRegId}
+              invalidRegIds={attemptedContinue ? new Set(registrations.filter(regMissingFields).map((r) => r.id)) : new Set<string>()}
               scrollToRegId={scrollToRegId}
               clearScroll={() => setScrollToRegId(null)}
               setRegPlayer={setRegPlayer}
@@ -589,7 +590,7 @@ function PlayersAndLessonsStep(props: {
   registrations: Registration[];
   lessons: Lesson[];
   lessonsLoading: boolean;
-  invalidRegId: string | null;
+  invalidRegIds: Set<string>;
   scrollToRegId: string | null;
   clearScroll: () => void;
   setRegPlayer: (id: string, patch: Partial<Registration["player"]>) => void;
@@ -645,7 +646,7 @@ function PlayersAndLessonsStep(props: {
           lessons={lessons}
           lessonsLoading={props.lessonsLoading}
           showRemove={false}
-          invalid={props.invalidRegId === accountHolderReg.id}
+          invalid={props.invalidRegIds.has(accountHolderReg.id)}
           scrollHere={props.scrollToRegId === accountHolderReg.id}
           onMounted={props.clearScroll}
           setRegPlayer={props.setRegPlayer}
@@ -685,7 +686,7 @@ function PlayersAndLessonsStep(props: {
               lessons={lessons}
               lessonsLoading={props.lessonsLoading}
               showRemove
-              invalid={props.invalidRegId === r.id}
+              invalid={props.invalidRegIds.has(r.id)}
               scrollHere={props.scrollToRegId === r.id}
               onMounted={props.clearScroll}
               setRegPlayer={props.setRegPlayer}
@@ -820,34 +821,58 @@ function ParticipantCard(props: {
           )}
         </div>
       )}
-
-      {/* Lesson selector */}
-      <div className="mt-3 space-y-1.5">
-        <Label htmlFor={`lesson-${reg.id}`}>Lesson *</Label>
-        <select
-          id={`lesson-${reg.id}`}
-          value={reg.lessonId}
-          onChange={(e) => props.setRegLesson(reg.id, e.target.value)}
-          className="flex h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-sm"
-        >
-          <option value="">
-            {props.lessonsLoading ? "Loading lessons…" : "Choose a lesson"}
-          </option>
-          {props.lessons.map((l) => {
-            const isFull = l.booked >= l.capacity;
-            return (
-              <option key={l.id} value={l.id} disabled={isFull}>
-                {formatLessonOptionLabel(l)}{isFull ? " · FULL" : ""}
-              </option>
-            );
-          })}
-        </select>
+      {/* Lesson selector — card/tile picker */}
+      <div className="mt-3 space-y-2">
+        <Label>Lesson *</Label>
+        {props.lessonsLoading ? (
+          <p className="text-xs text-muted-foreground">Loading lessons…</p>
+        ) : props.lessons.length === 0 ? (
+          <p className="text-xs text-muted-foreground">No lessons available.</p>
+        ) : (
+          <div className="grid gap-2 sm:grid-cols-2">
+            {props.lessons.map((l) => {
+              const isFull = l.booked >= l.capacity;
+              const isSelected = reg.lessonId === l.id;
+              const d = new Date(l.start_time);
+              const e = new Date(l.end_time);
+              const day = d.toLocaleDateString(undefined, { weekday: "long" });
+              const date = d.toLocaleDateString(undefined, { month: "short", day: "numeric", year: "numeric" });
+              const timeRange = `${d.toLocaleTimeString(undefined, { hour: "numeric", minute: "2-digit" })}–${e.toLocaleTimeString(undefined, { hour: "numeric", minute: "2-digit" })}`;
+              return (
+                <button
+                  key={l.id}
+                  type="button"
+                  disabled={isFull && !isSelected}
+                  onClick={() => props.setRegLesson(reg.id, l.id)}
+                  className={`relative text-left rounded-lg border-2 p-3 transition-all ${
+                    isSelected
+                      ? "border-green-600 bg-green-50 dark:bg-green-950/30 ring-2 ring-green-600/30"
+                      : isFull
+                      ? "border-border bg-muted/40 opacity-60 cursor-not-allowed"
+                      : "border-border bg-background hover:border-primary/60 hover:bg-secondary/40"
+                  }`}
+                >
+                  {isSelected && (
+                    <span className="absolute right-2 top-2 inline-flex h-5 w-5 items-center justify-center rounded-full bg-green-600 text-white">
+                      <Check className="h-3.5 w-3.5" />
+                    </span>
+                  )}
+                  <div className="text-sm font-semibold pr-6">{l.title}</div>
+                  <div className="mt-0.5 text-xs text-muted-foreground">{day} · {date}</div>
+                  <div className="text-xs text-muted-foreground">{timeRange}</div>
+                  <div className="mt-1 text-sm font-semibold text-foreground">${Number(l.price).toFixed(0)}{isFull ? " · FULL" : ""}</div>
+                </button>
+              );
+            })}
+          </div>
+        )}
         {reg.lessonId && (
           <p className="text-[11px] text-muted-foreground">
             Deposit: <span className="font-semibold text-foreground">${reg.depositAmount.toFixed(2)}</span>
           </p>
         )}
       </div>
+
 
       {props.invalid && (
         <p className="mt-3 text-xs font-medium text-destructive">
