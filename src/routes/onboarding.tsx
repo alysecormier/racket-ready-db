@@ -21,10 +21,9 @@ import { ChevronLeft, ChevronRight } from "lucide-react";
 export const Route = createFileRoute("/onboarding")({
   head: () => ({
     meta: [
-      { title: "Get Started — Ace Tennis Academy" },
-      { name: "description", content: "Join Ace Tennis Academy in a few simple steps." },
-    ],
+      { title: "Welcome to 2026 Tennis Lessons" },
       { name: "description", content: "Welcome to 2026 Tennis Lessons — register in a few simple steps." },
+    ],
   component: OnboardingPage,
 });
 
