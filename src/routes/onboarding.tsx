@@ -646,7 +646,7 @@ function PlayersAndLessonsStep(props: {
           lessons={lessons}
           lessonsLoading={props.lessonsLoading}
           showRemove={false}
-          invalid={props.invalidRegId === accountHolderReg.id}
+          invalid={props.invalidRegIds.has(accountHolderReg.id)}
           scrollHere={props.scrollToRegId === accountHolderReg.id}
           onMounted={props.clearScroll}
           setRegPlayer={props.setRegPlayer}
@@ -686,7 +686,7 @@ function PlayersAndLessonsStep(props: {
               lessons={lessons}
               lessonsLoading={props.lessonsLoading}
               showRemove
-              invalid={props.invalidRegId === r.id}
+              invalid={props.invalidRegIds.has(r.id)}
               scrollHere={props.scrollToRegId === r.id}
               onMounted={props.clearScroll}
               setRegPlayer={props.setRegPlayer}
