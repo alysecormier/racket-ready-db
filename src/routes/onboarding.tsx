@@ -24,6 +24,7 @@ export const Route = createFileRoute("/onboarding")({
       { title: "Welcome to 2026 Tennis Lessons" },
       { name: "description", content: "Welcome to 2026 Tennis Lessons — register in a few simple steps." },
     ],
+  }),
   component: OnboardingPage,
 });
 
