@@ -1075,27 +1075,25 @@ function PaymentStep(props: {
       </div>
 
       {paid ? (
-        <div className="rounded-lg border border-primary/40 bg-primary/5 p-6 text-center">
-          <CheckCircle2 className="mx-auto h-10 w-10 text-primary" />
-          <div className="mt-3 text-lg font-bold">Booking confirmed!</div>
-          <p className="mt-1 text-sm text-muted-foreground">You're all set. See you on the court.</p>
-          <Button onClick={() => navigate({ to: "/" })} className="mt-4">Done</Button>
+        <div className="rounded-lg border border-primary/40 bg-primary/5 p-8 text-center">
+          <div className="mx-auto text-5xl">🎾</div>
+          <div className="mt-3 text-xl font-bold">You're all set!</div>
+          <p className="mt-2 text-sm text-muted-foreground">
+            Welcome to 2026 Tennis Lessons. We'll be in touch shortly with next steps.
+          </p>
+          <Button onClick={() => navigate({ to: "/" })} className="mt-5">Done</Button>
         </div>
-      ) : single ? (
-        <div className="rounded-lg border border-border bg-background overflow-hidden">
-          <LessonCheckout
-            lessonId={single.lesson.id}
-            studentId={single.item.studentId}
-            stayForMatchPlay={stayForMatchPlay}
-          />
-        </div>
+      ) : selectedMethod ? (
+        <PaymentConfirm
+          method={selectedMethod}
+          onConfirm={() => setPaid(true)}
+          onBack={() => setSelectedMethod(null)}
+        />
       ) : (
-        <div className="rounded-lg border-2 border-dashed border-border bg-secondary/20 p-4 text-sm text-muted-foreground">
-          Multiple-registration checkout is ready in the portal UI. Stripe checkout needs to be updated to charge this cart as one transaction.
-        </div>
+        <PaymentMethodPicker onSelect={setSelectedMethod} />
       )}
 
-      {!paid && (
+      {!paid && !selectedMethod && (
         <Button onClick={props.onBack} variant="ghost" className="w-full">
           ← Edit registrations
         </Button>
