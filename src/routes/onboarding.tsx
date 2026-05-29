@@ -348,7 +348,6 @@ function OnboardingPage() {
 
   return (
     <div className="min-h-screen bg-gradient-to-br from-background via-secondary/30 to-background">
-      <PaymentTestModeBanner />
       <Toaster richColors position="top-center" />
       <div className="mx-auto max-w-2xl px-4 py-8 sm:py-12">
         <header className="mb-8 text-center">
