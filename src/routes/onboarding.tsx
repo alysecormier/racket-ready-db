@@ -305,10 +305,22 @@ function OnboardingPage() {
       }
     }
     if (rows.length === 0) return true;
-    // Idempotent via unique partial index on (participant_id, lesson_id) WHERE cancellation_status='Active'
-    const { error } = await supabase
+    // Filter out rows that already have an Active booking (partial unique
+    // index can't be used with ON CONFLICT, so we dedup manually).
+    const participantIds = Array.from(new Set(rows.map((r) => r.participant_id)));
+    const lessonIds = Array.from(new Set(rows.map((r) => r.lesson_id)));
+    const { data: existing } = await supabase
       .from("lesson_bookings")
-      .upsert(rows, { onConflict: "participant_id,lesson_id", ignoreDuplicates: true });
+      .select("participant_id, lesson_id")
+      .in("participant_id", participantIds)
+      .in("lesson_id", lessonIds)
+      .eq("cancellation_status", "Active");
+    const existingKeys = new Set(
+      (existing ?? []).map((e: { participant_id: string; lesson_id: string }) => `${e.participant_id}::${e.lesson_id}`),
+    );
+    const toInsert = rows.filter((r) => !existingKeys.has(`${r.participant_id}::${r.lesson_id}`));
+    if (toInsert.length === 0) return true;
+    const { error } = await supabase.from("lesson_bookings").insert(toInsert);
     if (error) {
       console.error("lesson_bookings insert", error);
       return false;
