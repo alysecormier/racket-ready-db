@@ -205,7 +205,9 @@ function DashboardPage() {
         </Link>
 
         <section className="mb-8">
-          <h2 className="mb-3 text-lg font-semibold">Upcoming Lessons</h2>
+          <h2 className="mb-3 text-lg font-semibold">
+            Your Lessons{!loading && ` (${upcoming.length} upcoming)`}
+          </h2>
 
           {loading ? (
             <p className="text-sm text-muted-foreground">Loading…</p>
