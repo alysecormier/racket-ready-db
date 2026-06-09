@@ -75,14 +75,19 @@ function buildIcsForBooking(b: Booking, firstName: string): string {
     "END:VCALENDAR",
   ].join("\r\n");
 }
-function downloadBookingIcs(b: Booking, firstName: string) {
-  const blob = new Blob([buildIcsForBooking(b, firstName)], { type: "text/calendar;charset=utf-8" });
-  const url = URL.createObjectURL(blob);
-  const a = document.createElement("a");
-  a.href = url;
-  a.download = `tennis-lesson-${firstName.toLowerCase().replace(/\s+/g, "-")}-${b.lesson_date}.ics`;
-  document.body.appendChild(a); a.click(); document.body.removeChild(a);
-  setTimeout(() => URL.revokeObjectURL(url), 1000);
+function googleCalendarUrl(b: Booking, firstName: string): string {
+  const start = new Date(`${b.lesson_date}T${b.lesson_start_time ?? "09:00:00"}`);
+  const end = new Date(`${b.lesson_date}T${b.lesson_end_time ?? "10:00:00"}`);
+  const fmt = (d: Date) =>
+    `${d.getUTCFullYear()}${pad2(d.getUTCMonth() + 1)}${pad2(d.getUTCDate())}T${pad2(d.getUTCHours())}${pad2(d.getUTCMinutes())}${pad2(d.getUTCSeconds())}Z`;
+  const params = new URLSearchParams({
+    action: "TEMPLATE",
+    text: `🎾 Tennis Lesson – ${firstName}`,
+    dates: `${fmt(start)}/${fmt(end)}`,
+    details: b.lesson_name,
+    location: LOCATION_STR,
+  });
+  return `https://calendar.google.com/calendar/render?${params.toString()}`;
 }
 
 function DashboardPage() {
