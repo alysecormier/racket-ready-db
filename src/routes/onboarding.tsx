@@ -397,7 +397,43 @@ function OnboardingPage() {
         gender: p.gender,
       })),
     );
-  }
+
+  // On mount: if user is already signed in, either redirect to /dashboard
+  // or (when ?book=1) hydrate their profile and jump straight to step 1.
+  useEffect(() => {
+    let cancelled = false;
+    (async () => {
+      const { data: { user } } = await supabase.auth.getUser();
+      if (cancelled) return;
+      if (!user) {
+        setBootstrapping(false);
+        return;
+      }
+      if (search.book !== 1) {
+        navigate({ to: "/dashboard" });
+        return;
+      }
+      const { data: profile } = await supabase
+        .from("profiles")
+        .select("full_name, phone, email")
+        .eq("id", user.id)
+        .maybeSingle();
+      if (cancelled) return;
+      if (profile) {
+        setFullName(profile.full_name ?? "");
+        setPhone(profile.phone ?? "");
+        setEmail(profile.email ?? user.email ?? "");
+      } else {
+        setEmail(user.email ?? "");
+      }
+      setStep(1);
+      setBootstrapping(false);
+    })();
+    return () => { cancelled = true; };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
+
 
 
   // Initialize account holder registration once we know the name
