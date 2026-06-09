@@ -1244,6 +1244,7 @@ function ClientDetail({ client, onDeleted }: { client: Profile; onDeleted: () =>
       participant_name: string;
       deposit_status: string;
       cancellation_status: string;
+      is_waitlisted: boolean;
     }>
   >([]);
   const [confirmDeleteOpen, setConfirmDeleteOpen] = useState(false);
@@ -1260,14 +1261,14 @@ function ClientDetail({ client, onDeleted }: { client: Profile; onDeleted: () =>
   async function loadLessons() {
     const { data: lbData } = await supabase
       .from("lesson_bookings")
-      .select("id, lesson_name, lesson_date, lesson_start_time, lesson_end_time, deposit_status, cancellation_status, participant_id")
+      .select("id, lesson_name, lesson_date, lesson_start_time, lesson_end_time, deposit_status, cancellation_status, participant_id, is_waitlisted")
       .eq("account_id", client.id)
       .order("lesson_date", { ascending: false });
     const rows = (lbData ?? []) as Array<{
       id: string; lesson_name: string; lesson_date: string;
       lesson_start_time: string | null; lesson_end_time: string | null;
       deposit_status: string; cancellation_status: string;
-      participant_id: string;
+      participant_id: string; is_waitlisted: boolean;
     }>;
     if (rows.length === 0) { setClientLessons([]); return; }
     const partIds = Array.from(new Set(rows.map((r) => r.participant_id)));
@@ -1291,9 +1292,11 @@ function ClientDetail({ client, onDeleted }: { client: Profile; onDeleted: () =>
         participant_name: name,
         deposit_status: r.deposit_status,
         cancellation_status: r.cancellation_status,
+        is_waitlisted: r.is_waitlisted,
       };
     }));
   }
+
 
   useEffect(() => {
     (async () => {
