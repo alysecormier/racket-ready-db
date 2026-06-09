@@ -1409,13 +1409,21 @@ function ClientDetail({ client, onDeleted }: { client: Profile; onDeleted: () =>
                       </div>
                     </div>
                     <div className="flex flex-col items-end gap-1">
-                      <Badge variant={row.deposit_status === "Paid" ? "default" : "secondary"}>
-                        {row.deposit_status}
-                      </Badge>
+                      {row.is_waitlisted ? (
+                        <Badge variant="secondary">Waitlisted</Badge>
+                      ) : (
+                        <Badge
+                          variant={row.deposit_status === "Paid" ? "default" : "secondary"}
+                          className={row.deposit_status === "Confirmed" ? "bg-emerald-600 text-white hover:bg-emerald-600" : undefined}
+                        >
+                          {row.deposit_status}
+                        </Badge>
+                      )}
                       {row.cancellation_status !== "Active" && (
                         <Badge variant="destructive">{row.cancellation_status}</Badge>
                       )}
                     </div>
+
                   </div>
                 </div>
               );
