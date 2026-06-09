@@ -14,6 +14,9 @@ import { useServerFn } from "@tanstack/react-start";
 import { signWaiver } from "@/lib/waiver.functions";
 
 export const Route = createFileRoute("/onboarding")({
+  validateSearch: (search: Record<string, unknown>) => ({
+    book: search.book === "1" || search.book === 1 ? 1 : undefined,
+  }),
   head: () => ({
     meta: [
       { title: "Welcome to 2026 Tennis Lessons" },
@@ -132,8 +135,10 @@ function formatLessonDateTime(l: Lesson): string {
 
 function OnboardingPage() {
   const navigate = useNavigate();
+  const search = Route.useSearch();
   const signWaiverFn = useServerFn(signWaiver);
   const [step, setStep] = useState(0);
+  const [bootstrapping, setBootstrapping] = useState(true);
   const [loading, setLoading] = useState(false);
 
   // step 0 (account)
@@ -393,6 +398,45 @@ function OnboardingPage() {
       })),
     );
   }
+
+
+
+  // On mount: if user is already signed in, either redirect to /dashboard
+  // or (when ?book=1) hydrate their profile and jump straight to step 1.
+  useEffect(() => {
+    let cancelled = false;
+    (async () => {
+      const { data: { user } } = await supabase.auth.getUser();
+      if (cancelled) return;
+      if (!user) {
+        setBootstrapping(false);
+        return;
+      }
+      if (search.book !== 1) {
+        navigate({ to: "/dashboard" });
+        return;
+      }
+      const { data: profile } = await supabase
+        .from("profiles")
+        .select("full_name, phone, email")
+        .eq("id", user.id)
+        .maybeSingle();
+      if (cancelled) return;
+      if (profile) {
+        setFullName(profile.full_name ?? "");
+        setPhone(profile.phone ?? "");
+        setEmail(profile.email ?? user.email ?? "");
+      } else {
+        setEmail(user.email ?? "");
+      }
+      setStep(1);
+      setBootstrapping(false);
+    })();
+    return () => { cancelled = true; };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
+
 
 
   // Initialize account holder registration once we know the name
@@ -731,10 +775,19 @@ function OnboardingPage() {
     phone,
   };
 
+  if (bootstrapping) {
+    return (
+      <div className="min-h-screen flex items-center justify-center bg-gradient-to-br from-background via-secondary/30 to-background">
+        <div className="text-sm text-muted-foreground">Loading…</div>
+      </div>
+    );
+  }
+
   return (
     <div className="min-h-screen bg-gradient-to-br from-background via-secondary/30 to-background">
       <Toaster richColors position="top-center" />
       <div className="mx-auto max-w-2xl px-4 py-8 sm:py-12">
+
         <header className="mb-8 text-center">
           <div className="mb-3 inline-flex h-12 w-12 items-center justify-center rounded-full bg-primary text-primary-foreground shadow-lg">
             <span className="text-2xl">🎾</span>

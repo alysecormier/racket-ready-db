@@ -189,7 +189,7 @@ function DashboardPage() {
           </Button>
         </header>
 
-        <Link to="/onboarding">
+        <Link to="/onboarding" search={{ book: 1 }}>
           <Button className="mb-6 w-full bg-green-600 hover:bg-green-700 text-white">
             + Book More Lessons
           </Button>
@@ -203,7 +203,7 @@ function DashboardPage() {
           ) : upcoming.length === 0 ? (
             <Card className="p-6 text-center">
               <p className="text-sm">No upcoming lessons scheduled.</p>
-              <Link to="/onboarding">
+              <Link to="/onboarding" search={{ book: 1 }}>
                 <Button className="mt-3 bg-green-600 hover:bg-green-700 text-white">Book a Lesson →</Button>
               </Link>
             </Card>
