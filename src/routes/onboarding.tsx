@@ -1590,10 +1590,10 @@ function PaymentStep(props: {
             memoNames={memoInfo.names}
             memoDate={memoInfo.dateStr}
             saving={saving}
-            onConfirm={async () => {
+            onConfirm={async (transactionId) => {
               setSaveError(null);
               setSaving(true);
-              const ok = await props.onPaid(selectedMethod!.label);
+              const ok = await props.onPaid(selectedMethod!.label, transactionId);
               setSaving(false);
               if (!ok) {
                 setSaveError("Something went wrong saving your registration. Please try again or contact alysemcormier@gmail.com");
