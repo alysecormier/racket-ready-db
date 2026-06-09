@@ -426,10 +426,10 @@ function OnboardingPage() {
           .order("start_time", { ascending: true })
           .limit(50),
         supabase
-          .from("bookings")
+          .from("lesson_bookings")
           .select("lesson_id")
-          .eq("payment_status", "paid")
-          .eq("cancellation_status", "active"),
+          .eq("cancellation_status", "Active")
+          .eq("is_waitlisted", false),
       ]);
       if (cancelled) return;
       if (lessonErr) toast.error(lessonErr.message);
