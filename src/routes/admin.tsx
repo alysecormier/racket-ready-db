@@ -677,6 +677,8 @@ function LessonDialog({ lesson, onClose, onChanged, onDeleted }: {
         participant_name: name || "Unnamed",
         participant_type: part?.participant_type ?? "adult",
         account_email: acct?.email ?? null,
+        payment_method: r.payment_method,
+        payment_reference: r.payment_reference,
       };
     }));
     setLoading(false);
