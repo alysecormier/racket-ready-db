@@ -704,7 +704,10 @@ function LessonDialog({ lesson, onClose, onChanged, onDeleted }: {
   if (!lesson) return null;
   const safeLesson: Lesson = lesson;
 
-  const bookedCount = bookings.length;
+  const activeLessonBookings = lessonBookings.filter((r) => !r.is_waitlisted);
+  const waitlistedLessonBookings = lessonBookings.filter((r) => r.is_waitlisted);
+  const bookedCount = bookings.length + activeLessonBookings.length;
+  const waitlistCount = waitlist.length + waitlistedLessonBookings.length;
   const isAdultMix = lesson.lesson_type === "adult_morning_mix";
 
   function findDuplicateBooking(profileId: string, studentId: string | null): boolean {
