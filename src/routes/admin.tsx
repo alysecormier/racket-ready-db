@@ -1028,8 +1028,8 @@ function LessonDialog({ lesson, onClose, onChanged, onDeleted }: {
                           {isConfirmed ? "Confirmed" : "Pending"}
                         </Badge>
                       </div>
-                      {!isConfirmed && (
-                        <div className="mt-3 flex justify-end">
+                      <div className="mt-3 flex flex-wrap items-center gap-2">
+                        {!isConfirmed && (
                           <Button
                             size="sm"
                             disabled={approvingId === r.id}
@@ -1050,8 +1050,28 @@ function LessonDialog({ lesson, onClose, onChanged, onDeleted }: {
                           >
                             {approvingId === r.id ? "Approving…" : "Approve payment"}
                           </Button>
-                        </div>
-                      )}
+                        )}
+                        <Button
+                          size="sm"
+                          variant="ghost"
+                          className="ml-auto text-destructive hover:text-destructive"
+                          onClick={async () => {
+                            if (!confirm(`Remove ${r.participant_name} from this lesson?`)) return;
+                            const { error } = await supabase
+                              .from("lesson_bookings")
+                              .delete()
+                              .eq("id", r.id);
+                            if (error) {
+                              toast.error("Could not remove");
+                            } else {
+                              toast.success("Removed from lesson");
+                              reload(safeLesson);
+                            }
+                          }}
+                        >
+                          <Trash2 className="mr-1 h-3 w-3" /> Remove
+                        </Button>
+                      </div>
                     </div>
                     );
                   })}
