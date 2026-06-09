@@ -9,6 +9,7 @@
 // Additionally, you should also exclude this file from your linter and/or formatter to prevent it from being checked or modified.
 
 import { Route as rootRouteImport } from './routes/__root'
+import { Route as ResetPasswordRouteImport } from './routes/reset-password'
 import { Route as OnboardingRouteImport } from './routes/onboarding'
 import { Route as LoginRouteImport } from './routes/login'
 import { Route as DashboardRouteImport } from './routes/dashboard'
@@ -20,6 +21,11 @@ import { Route as ApiPublicHooksSmsInboundRouteImport } from './routes/api/publi
 import { Route as ApiPublicHooksRemindersRouteImport } from './routes/api/public/hooks/reminders'
 import { Route as ApiPublicHooksExpireOffersRouteImport } from './routes/api/public/hooks/expire-offers'
 
+const ResetPasswordRoute = ResetPasswordRouteImport.update({
+  id: '/reset-password',
+  path: '/reset-password',
+  getParentRoute: () => rootRouteImport,
+} as any)
 const OnboardingRoute = OnboardingRouteImport.update({
   id: '/onboarding',
   path: '/onboarding',
@@ -80,6 +86,7 @@ export interface FileRoutesByFullPath {
   '/dashboard': typeof DashboardRoute
   '/login': typeof LoginRoute
   '/onboarding': typeof OnboardingRoute
+  '/reset-password': typeof ResetPasswordRoute
   '/checkout/return': typeof CheckoutReturnRoute
   '/api/public/hooks/expire-offers': typeof ApiPublicHooksExpireOffersRoute
   '/api/public/hooks/reminders': typeof ApiPublicHooksRemindersRoute
@@ -92,6 +99,7 @@ export interface FileRoutesByTo {
   '/dashboard': typeof DashboardRoute
   '/login': typeof LoginRoute
   '/onboarding': typeof OnboardingRoute
+  '/reset-password': typeof ResetPasswordRoute
   '/checkout/return': typeof CheckoutReturnRoute
   '/api/public/hooks/expire-offers': typeof ApiPublicHooksExpireOffersRoute
   '/api/public/hooks/reminders': typeof ApiPublicHooksRemindersRoute
@@ -105,6 +113,7 @@ export interface FileRoutesById {
   '/dashboard': typeof DashboardRoute
   '/login': typeof LoginRoute
   '/onboarding': typeof OnboardingRoute
+  '/reset-password': typeof ResetPasswordRoute
   '/checkout/return': typeof CheckoutReturnRoute
   '/api/public/hooks/expire-offers': typeof ApiPublicHooksExpireOffersRoute
   '/api/public/hooks/reminders': typeof ApiPublicHooksRemindersRoute
@@ -119,6 +128,7 @@ export interface FileRouteTypes {
     | '/dashboard'
     | '/login'
     | '/onboarding'
+    | '/reset-password'
     | '/checkout/return'
     | '/api/public/hooks/expire-offers'
     | '/api/public/hooks/reminders'
@@ -131,6 +141,7 @@ export interface FileRouteTypes {
     | '/dashboard'
     | '/login'
     | '/onboarding'
+    | '/reset-password'
     | '/checkout/return'
     | '/api/public/hooks/expire-offers'
     | '/api/public/hooks/reminders'
@@ -143,6 +154,7 @@ export interface FileRouteTypes {
     | '/dashboard'
     | '/login'
     | '/onboarding'
+    | '/reset-password'
     | '/checkout/return'
     | '/api/public/hooks/expire-offers'
     | '/api/public/hooks/reminders'
@@ -156,6 +168,7 @@ export interface RootRouteChildren {
   DashboardRoute: typeof DashboardRoute
   LoginRoute: typeof LoginRoute
   OnboardingRoute: typeof OnboardingRoute
+  ResetPasswordRoute: typeof ResetPasswordRoute
   CheckoutReturnRoute: typeof CheckoutReturnRoute
   ApiPublicHooksExpireOffersRoute: typeof ApiPublicHooksExpireOffersRoute
   ApiPublicHooksRemindersRoute: typeof ApiPublicHooksRemindersRoute
@@ -165,6 +178,13 @@ export interface RootRouteChildren {
 
 declare module '@tanstack/react-router' {
   interface FileRoutesByPath {
+    '/reset-password': {
+      id: '/reset-password'
+      path: '/reset-password'
+      fullPath: '/reset-password'
+      preLoaderRoute: typeof ResetPasswordRouteImport
+      parentRoute: typeof rootRouteImport
+    }
     '/onboarding': {
       id: '/onboarding'
       path: '/onboarding'
@@ -244,6 +264,7 @@ const rootRouteChildren: RootRouteChildren = {
   DashboardRoute: DashboardRoute,
   LoginRoute: LoginRoute,
   OnboardingRoute: OnboardingRoute,
+  ResetPasswordRoute: ResetPasswordRoute,
   CheckoutReturnRoute: CheckoutReturnRoute,
   ApiPublicHooksExpireOffersRoute: ApiPublicHooksExpireOffersRoute,
   ApiPublicHooksRemindersRoute: ApiPublicHooksRemindersRoute,

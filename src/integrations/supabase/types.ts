@@ -253,6 +253,7 @@ export type Database = {
           lesson_start_time: string | null
           participant_id: string
           payment_method: string | null
+          payment_reference: string | null
           payment_reported_at: string | null
           policy_acknowledged: boolean
           policy_acknowledged_at: string | null
@@ -274,6 +275,7 @@ export type Database = {
           lesson_start_time?: string | null
           participant_id: string
           payment_method?: string | null
+          payment_reference?: string | null
           payment_reported_at?: string | null
           policy_acknowledged?: boolean
           policy_acknowledged_at?: string | null
@@ -295,6 +297,7 @@ export type Database = {
           lesson_start_time?: string | null
           participant_id?: string
           payment_method?: string | null
+          payment_reference?: string | null
           payment_reported_at?: string | null
           policy_acknowledged?: boolean
           policy_acknowledged_at?: string | null

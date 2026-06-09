@@ -239,7 +239,7 @@ function OnboardingPage() {
   // Persist all selected lessons across all participants as lesson_bookings
   // Persist all selected lessons across all participants as lesson_bookings
   // Returns true on success, false on error
-  async function persistBookings(paymentMethod: string): Promise<boolean> {
+  async function persistBookings(paymentMethod: string, paymentReference: string | null): Promise<boolean> {
     const { data: { user } } = await supabase.auth.getUser();
     if (!user) return false;
     // ensure account-holder participant id
@@ -269,6 +269,7 @@ function OnboardingPage() {
       deposit_amount: number;
       deposit_status: string;
       payment_method: string;
+      payment_reference: string | null;
       payment_reported_at: string;
       policy_acknowledged: boolean;
       policy_acknowledged_at: string;
@@ -298,6 +299,7 @@ function OnboardingPage() {
           deposit_amount: l.depositAmount,
           deposit_status: "Confirmed",
           payment_method: paymentMethod,
+          payment_reference: paymentReference,
           payment_reported_at: nowIso,
           policy_acknowledged: true,
           policy_acknowledged_at: nowIso,
@@ -1482,7 +1484,7 @@ function PaymentStep(props: {
   registrations: Registration[];
   accountHolder: AccountHolderInfo;
   onBack: () => void;
-  onPaid: (paymentMethod: string) => Promise<boolean>;
+  onPaid: (paymentMethod: string, paymentReference: string | null) => Promise<boolean>;
   onDone: () => void;
 }) {
   const [paid, setPaid] = useState(false);
@@ -1493,16 +1495,30 @@ function PaymentStep(props: {
 
   const total = props.registrations.reduce((s, r) => s + r.participantSubtotal, 0);
 
-  // Memo: "First1, First2 – earliestLessonDate" across all participants' all lessons
+  // Memo: "AccountHolder FullName, Participant1 FullName, … – earliestLessonDate"
   const memoInfo = useMemo(() => {
-    const names = props.registrations.map((r) => r.player.firstName.trim()).filter(Boolean);
+    const accountFull = `${props.accountHolder.firstName} ${props.accountHolder.lastName}`.trim();
+    const participantNames = props.registrations.map((r) => {
+      const first = r.player.firstName.trim();
+      const last = r.player.lastName.trim();
+      const full = `${first} ${last}`.trim();
+      return r.isAccountHolder ? accountFull : full;
+    }).filter(Boolean);
+    // Ensure account-holder full name appears once at the front even if no
+    // registration is flagged as the holder.
+    const seen = new Set<string>();
+    const ordered: string[] = [];
+    if (accountFull) { ordered.push(accountFull); seen.add(accountFull.toLowerCase()); }
+    for (const n of participantNames) {
+      if (!seen.has(n.toLowerCase())) { ordered.push(n); seen.add(n.toLowerCase()); }
+    }
     const allDates = props.registrations.flatMap((r) => r.lessons.map((l) => l.lessonDateTime)).filter(Boolean).sort();
     const earliest = allDates[0];
     const dateStr = earliest
       ? new Date(earliest).toLocaleDateString(undefined, { month: "long", day: "numeric" })
       : "";
-    return { names, dateStr, memo: `${names.join(", ")} – ${dateStr}` };
-  }, [props.registrations]);
+    return { names: ordered, dateStr, memo: `${ordered.join(", ")} – ${dateStr}` };
+  }, [props.registrations, props.accountHolder]);
 
   function downloadAllSessionIcs() {
     for (const r of props.registrations) {
@@ -1547,7 +1563,7 @@ function PaymentStep(props: {
           <div className="mx-auto text-5xl">🎾</div>
           <div className="mt-3 text-2xl font-bold">You're Registered!</div>
           <p className="mt-3 text-sm text-foreground">
-            Thank you, <span className="font-semibold">{props.accountHolder.firstName || "friend"}</span>. Your lesson registration has been received. A confirmation email has been sent to{" "}
+            Thank you, <span className="font-semibold">{props.accountHolder.fullName || "friend"}</span>. Your lesson registration has been received. A confirmation email has been sent to{" "}
             <span className="font-semibold">{props.accountHolder.email}</span>.
           </p>
           <p className="mt-3 text-sm text-muted-foreground">
@@ -1574,10 +1590,10 @@ function PaymentStep(props: {
             memoNames={memoInfo.names}
             memoDate={memoInfo.dateStr}
             saving={saving}
-            onConfirm={async () => {
+            onConfirm={async (transactionId) => {
               setSaveError(null);
               setSaving(true);
-              const ok = await props.onPaid(selectedMethod!.label);
+              const ok = await props.onPaid(selectedMethod!.label, transactionId);
               setSaving(false);
               if (!ok) {
                 setSaveError("Something went wrong saving your registration. Please try again or contact alysemcormier@gmail.com");
@@ -1651,7 +1667,7 @@ function MemoBlock({ names, date }: { names: string[]; date: string }) {
 function PaymentConfirm({
   method,
   depositAmount,
-  memo,
+  memo: _memo,
   memoNames,
   memoDate,
   onConfirm,
@@ -1663,10 +1679,13 @@ function PaymentConfirm({
   memo: string;
   memoNames: string[];
   memoDate: string;
-  onConfirm: () => void;
+  onConfirm: (transactionId: string) => void;
   onBack: () => void;
   saving?: boolean;
 }) {
+  const [transactionId, setTransactionId] = useState("");
+  const trimmedTxn = transactionId.trim();
+  const txnTooShort = trimmedTxn.length < 4;
 
   const amount = depositAmount.toFixed(2);
   let body: React.ReactNode = null;
@@ -1766,17 +1785,32 @@ function PaymentConfirm({
         {body}
       </div>
 
+      <div className="space-y-1.5 rounded-lg border border-border bg-background p-4">
+        <Label htmlFor="txn-id" className="text-sm font-semibold">
+          Transaction ID / Reference <span className="text-destructive">*</span>
+        </Label>
+        <p className="text-xs text-muted-foreground">
+          After sending payment, paste the confirmation/transaction ID from {method.label} here so we can verify your payment.
+        </p>
+        <Input
+          id="txn-id"
+          value={transactionId}
+          onChange={(e) => setTransactionId(e.target.value.slice(0, 100))}
+          placeholder="e.g. 1234567890ABCD"
+          autoComplete="off"
+        />
+      </div>
+
       <div className="flex flex-col-reverse gap-2 sm:flex-row">
         <Button variant="outline" onClick={onBack} className="flex-1 bg-gray-100 hover:bg-gray-200">
           Go Back
+        </Button>
         <Button
-          onClick={onConfirm}
-          disabled={saving}
+          onClick={() => onConfirm(trimmedTxn)}
+          disabled={saving || txnTooShort}
           className="flex-1 bg-green-600 text-white hover:bg-green-700"
         >
           {saving ? "Saving…" : "I've Paid ✓"}
-        </Button>
-
         </Button>
       </div>
     </div>

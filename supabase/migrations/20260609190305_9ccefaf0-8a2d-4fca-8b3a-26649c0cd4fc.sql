@@ -1,0 +1,1 @@
+ALTER TABLE public.lesson_bookings ADD COLUMN IF NOT EXISTS payment_reference text;

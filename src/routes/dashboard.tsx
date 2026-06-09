@@ -26,6 +26,7 @@ type Booking = {
   lesson_start_time: string | null;
   lesson_end_time: string | null;
   cancellation_status: string;
+  deposit_status: string | null;
   participant_id: string;
 };
 
@@ -103,7 +104,7 @@ function DashboardPage() {
     const [accRes, partsRes, bookRes] = await Promise.all([
       supabase.from("accounts").select("id, first_name, last_name, email, phone").eq("id", user.id).maybeSingle(),
       supabase.from("participants").select("id, first_name, last_name, participant_type, age, gender, is_account_holder").eq("account_id", user.id).eq("is_saved", true).order("is_account_holder", { ascending: false }),
-      supabase.from("lesson_bookings").select("id, lesson_name, lesson_date, lesson_start_time, lesson_end_time, cancellation_status, participant_id").eq("account_id", user.id).order("lesson_date", { ascending: true }),
+      supabase.from("lesson_bookings").select("id, lesson_name, lesson_date, lesson_start_time, lesson_end_time, cancellation_status, deposit_status, participant_id").eq("account_id", user.id).order("lesson_date", { ascending: true }),
     ]);
     setAccount(accRes.data ?? null);
     setParticipants(partsRes.data ?? []);
