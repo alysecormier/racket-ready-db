@@ -135,8 +135,10 @@ function formatLessonDateTime(l: Lesson): string {
 
 function OnboardingPage() {
   const navigate = useNavigate();
+  const search = Route.useSearch();
   const signWaiverFn = useServerFn(signWaiver);
   const [step, setStep] = useState(0);
+  const [bootstrapping, setBootstrapping] = useState(true);
   const [loading, setLoading] = useState(false);
 
   // step 0 (account)
