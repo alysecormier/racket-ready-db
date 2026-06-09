@@ -1484,7 +1484,7 @@ function PaymentStep(props: {
   registrations: Registration[];
   accountHolder: AccountHolderInfo;
   onBack: () => void;
-  onPaid: (paymentMethod: string) => Promise<boolean>;
+  onPaid: (paymentMethod: string, paymentReference: string | null) => Promise<boolean>;
   onDone: () => void;
 }) {
   const [paid, setPaid] = useState(false);
