@@ -1783,29 +1783,28 @@ function PaymentConfirm({
         {body}
       </div>
 
-      <div className="space-y-1.5 rounded-lg border border-border bg-background p-4">
-        <Label htmlFor="txn-id" className="text-sm font-semibold">
-          Transaction ID / Reference <span className="text-destructive">*</span>
-        </Label>
-        <p className="text-xs text-muted-foreground">
-          After sending payment, paste the confirmation/transaction ID from {method.label} here so we can verify your payment.
-        </p>
-        <Input
-          id="txn-id"
-          value={transactionId}
-          onChange={(e) => setTransactionId(e.target.value.slice(0, 100))}
-          placeholder="e.g. 1234567890ABCD"
-          autoComplete="off"
+      <label className="flex items-start gap-3 rounded-lg border border-border bg-background p-4 cursor-pointer hover:bg-accent/30">
+        <input
+          type="checkbox"
+          checked={confirmed}
+          onChange={(e) => setConfirmed(e.target.checked)}
+          className="mt-0.5 h-5 w-5 cursor-pointer"
         />
-      </div>
+        <div className="text-sm">
+          <div className="font-semibold">I've sent the payment of ${amount} via {method.label}</div>
+          <div className="text-xs text-muted-foreground mt-0.5">
+            Coach Alyse will verify the payment in {method.label} and confirm your spot. You'll get a confirmation once approved.
+          </div>
+        </div>
+      </label>
 
       <div className="flex flex-col-reverse gap-2 sm:flex-row">
         <Button variant="outline" onClick={onBack} className="flex-1 bg-gray-100 hover:bg-gray-200">
           Go Back
         </Button>
         <Button
-          onClick={() => onConfirm(trimmedTxn)}
-          disabled={saving || txnTooShort}
+          onClick={() => onConfirm("")}
+          disabled={saving || !confirmed}
           className="flex-1 bg-green-600 text-white hover:bg-green-700"
         >
           {saving ? "Saving…" : "I've Paid ✓"}
