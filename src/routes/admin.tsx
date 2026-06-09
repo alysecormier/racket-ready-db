@@ -575,6 +575,16 @@ function LessonDialog({ lesson, onClose, onChanged, onDeleted }: {
 }) {
   const [bookings, setBookings] = useState<(Booking & { stay_for_match_play?: boolean })[]>([]);
   const [waitlist, setWaitlist] = useState<Waitlist[]>([]);
+  const [lessonBookings, setLessonBookings] = useState<Array<{
+    id: string;
+    participant_id: string;
+    account_id: string;
+    deposit_status: string;
+    is_waitlisted: boolean;
+    participant_name: string;
+    participant_type: string;
+    account_email: string | null;
+  }>>([]);
   const [profiles, setProfiles] = useState<Record<string, Profile>>({});
   const [students, setStudents] = useState<Record<string, Student>>({});
   const [loading, setLoading] = useState(false);
@@ -603,34 +613,68 @@ function LessonDialog({ lesson, onClose, onChanged, onDeleted }: {
 
   async function reload(currentLesson: Lesson) {
     setLoading(true);
-    const [b, w] = await Promise.all([
+    const [b, w, lb] = await Promise.all([
       supabase.from("bookings").select("*").eq("lesson_id", currentLesson.id),
       supabase.from("waitlist").select("*").eq("lesson_id", currentLesson.id).order("joined_at"),
+      supabase
+        .from("lesson_bookings")
+        .select("id, participant_id, account_id, deposit_status, is_waitlisted")
+        .eq("lesson_id", currentLesson.id)
+        .eq("cancellation_status", "Active"),
     ]);
     const bookingsData = (b.data ?? []) as (Booking & { stay_for_match_play?: boolean })[];
     const waitlistData = (w.data ?? []) as Waitlist[];
+    const lbRows = (lb.data ?? []) as Array<{
+      id: string; participant_id: string; account_id: string;
+      deposit_status: string; is_waitlisted: boolean;
+    }>;
     setBookings(bookingsData);
     setWaitlist(waitlistData);
 
     const profileIds = Array.from(new Set([
       ...bookingsData.map((x) => x.profile_id),
       ...waitlistData.map((x) => x.profile_id),
+      ...lbRows.map((x) => x.account_id),
     ]));
     const studentIds = Array.from(new Set([
       ...bookingsData.map((x) => x.student_id).filter(Boolean),
       ...waitlistData.map((x) => x.student_id).filter(Boolean),
     ] as string[]));
+    const participantIds = Array.from(new Set(lbRows.map((x) => x.participant_id)));
 
-    const [{ data: pData }, { data: sData }] = await Promise.all([
+    const [{ data: pData }, { data: sData }, { data: partData }] = await Promise.all([
       profileIds.length
         ? supabase.from("profiles").select("*").in("id", profileIds)
         : Promise.resolve({ data: [] }),
       studentIds.length
         ? supabase.from("students").select("*").in("id", studentIds)
         : Promise.resolve({ data: [] }),
+      participantIds.length
+        ? supabase.from("participants").select("id, first_name, last_name, participant_type").in("id", participantIds)
+        : Promise.resolve({ data: [] }),
     ]);
     setProfiles(Object.fromEntries((pData ?? []).map((p: Profile) => [p.id, p])));
     setStudents(Object.fromEntries((sData ?? []).map((s: Student) => [s.id, s])));
+    const partsMap = Object.fromEntries(
+      ((partData ?? []) as Array<{ id: string; first_name: string; last_name: string; participant_type: string }>)
+        .map((p) => [p.id, p]),
+    );
+    const profMap = Object.fromEntries((pData ?? []).map((p: Profile) => [p.id, p]));
+    setLessonBookings(lbRows.map((r) => {
+      const part = partsMap[r.participant_id];
+      const acct = profMap[r.account_id] as Profile | undefined;
+      const name = part ? `${part.first_name} ${part.last_name}`.trim() : (acct?.full_name ?? "Unnamed");
+      return {
+        id: r.id,
+        participant_id: r.participant_id,
+        account_id: r.account_id,
+        deposit_status: r.deposit_status,
+        is_waitlisted: r.is_waitlisted,
+        participant_name: name || "Unnamed",
+        participant_type: part?.participant_type ?? "adult",
+        account_email: acct?.email ?? null,
+      };
+    }));
     setLoading(false);
   }
 
@@ -660,7 +704,10 @@ function LessonDialog({ lesson, onClose, onChanged, onDeleted }: {
   if (!lesson) return null;
   const safeLesson: Lesson = lesson;
 
-  const bookedCount = bookings.length;
+  const activeLessonBookings = lessonBookings.filter((r) => !r.is_waitlisted);
+  const waitlistedLessonBookings = lessonBookings.filter((r) => r.is_waitlisted);
+  const bookedCount = bookings.length + activeLessonBookings.length;
+  const waitlistCount = waitlist.length + waitlistedLessonBookings.length;
   const isAdultMix = lesson.lesson_type === "adult_morning_mix";
 
   function findDuplicateBooking(profileId: string, studentId: string | null): boolean {
@@ -823,7 +870,7 @@ function LessonDialog({ lesson, onClose, onChanged, onDeleted }: {
             {new Date(lesson.start_time).toLocaleString(undefined, {
               weekday: "long", month: "short", day: "numeric",
               hour: "numeric", minute: "2-digit",
-            })} • {bookedCount} / {safeLesson.capacity} booked · {waitlist.length} waitlisted
+            })} • {bookedCount} / {safeLesson.capacity} booked · {waitlistCount} waitlisted
           </p>
         </DialogHeader>
 
@@ -898,9 +945,9 @@ function LessonDialog({ lesson, onClose, onChanged, onDeleted }: {
 
             <section>
               <h3 className="mb-2 text-sm font-semibold uppercase tracking-wide text-muted-foreground">
-                Attending ({bookings.length})
+                Attending ({bookedCount})
               </h3>
-              {bookings.length === 0 ? (
+              {bookedCount === 0 ? (
                 <p className="text-sm text-muted-foreground">No bookings yet.</p>
               ) : (
                 <div className="space-y-2">
@@ -950,6 +997,22 @@ function LessonDialog({ lesson, onClose, onChanged, onDeleted }: {
                       </div>
                     );
                   })}
+                  {activeLessonBookings.map((r) => (
+                    <div key={r.id} className="rounded-lg border border-border bg-background p-3">
+                      <div className="flex items-start justify-between gap-3">
+                        <div className="min-w-0">
+                          <div className="font-medium">{r.participant_name}</div>
+                          <div className="text-xs text-muted-foreground">
+                            {r.participant_type === "junior" ? "Junior" : "Adult"}
+                            {r.account_email ? ` • ${r.account_email}` : ""}
+                          </div>
+                        </div>
+                        <Badge variant="secondary" className="bg-emerald-100 text-emerald-700">
+                          {r.deposit_status || "Confirmed"}
+                        </Badge>
+                      </div>
+                    </div>
+                  ))}
                 </div>
               )}
             </section>
@@ -958,9 +1021,9 @@ function LessonDialog({ lesson, onClose, onChanged, onDeleted }: {
 
             <section>
               <h3 className="mb-2 text-sm font-semibold uppercase tracking-wide text-muted-foreground">
-                Waitlist ({waitlist.length})
+                Waitlist ({waitlistCount})
               </h3>
-              {waitlist.length === 0 ? (
+              {waitlistCount === 0 ? (
                 <p className="text-sm text-muted-foreground">Empty.</p>
               ) : (
                 <ol className="space-y-2">
@@ -986,6 +1049,20 @@ function LessonDialog({ lesson, onClose, onChanged, onDeleted }: {
                       </li>
                     );
                   })}
+                  {waitlistedLessonBookings.map((r, i) => (
+                    <li key={r.id} className="flex items-center gap-3 rounded-lg border border-border bg-secondary/30 p-3">
+                      <div className="flex h-7 w-7 items-center justify-center rounded-full bg-primary text-xs font-bold text-primary-foreground">
+                        {waitlist.length + i + 1}
+                      </div>
+                      <div className="flex-1 min-w-0">
+                        <div className="text-sm font-medium truncate">{r.participant_name}</div>
+                        <div className="text-xs text-muted-foreground">
+                          {r.participant_type === "junior" ? "Junior" : "Adult"}
+                          {r.account_email ? ` • ${r.account_email}` : ""}
+                        </div>
+                      </div>
+                    </li>
+                  ))}
                 </ol>
               )}
             </section>
