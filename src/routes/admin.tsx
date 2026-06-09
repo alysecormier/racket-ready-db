@@ -870,7 +870,7 @@ function LessonDialog({ lesson, onClose, onChanged, onDeleted }: {
             {new Date(lesson.start_time).toLocaleString(undefined, {
               weekday: "long", month: "short", day: "numeric",
               hour: "numeric", minute: "2-digit",
-            })} • {bookedCount} / {safeLesson.capacity} booked · {waitlist.length} waitlisted
+            })} • {bookedCount} / {safeLesson.capacity} booked · {waitlistCount} waitlisted
           </p>
         </DialogHeader>
 
