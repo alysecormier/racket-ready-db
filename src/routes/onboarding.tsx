@@ -273,6 +273,7 @@ function OnboardingPage() {
       policy_acknowledged: boolean;
       policy_acknowledged_at: string;
       cancellation_status: string;
+      is_waitlisted: boolean;
     };
     const rows: Row[] = [];
     const seen = new Set<string>();
@@ -295,12 +296,13 @@ function OnboardingPage() {
           lesson_end_time: end.toTimeString().slice(0, 8),
           lesson_price: l.depositAmount,
           deposit_amount: l.depositAmount,
-          deposit_status: "Pending",
+          deposit_status: "Confirmed",
           payment_method: paymentMethod,
           payment_reported_at: nowIso,
           policy_acknowledged: true,
           policy_acknowledged_at: nowIso,
           cancellation_status: "Active",
+          is_waitlisted: false,
         });
       }
     }
@@ -311,7 +313,7 @@ function OnboardingPage() {
     const lessonIds = Array.from(new Set(rows.map((r) => r.lesson_id)));
     const { data: existing } = await supabase
       .from("lesson_bookings")
-      .select("participant_id, lesson_id")
+      .select("participant_id, lesson_id, is_waitlisted")
       .in("participant_id", participantIds)
       .in("lesson_id", lessonIds)
       .eq("cancellation_status", "Active");
@@ -320,13 +322,52 @@ function OnboardingPage() {
     );
     const toInsert = rows.filter((r) => !existingKeys.has(`${r.participant_id}::${r.lesson_id}`));
     if (toInsert.length === 0) return true;
+
+    // Capacity check: for each lesson, count confirmed (non-waitlisted) Active
+    // bookings and compare to lesson capacity. Anything over capacity becomes
+    // a waitlist entry instead of a confirmed seat.
+    const { data: lessonRows } = await supabase
+      .from("lessons")
+      .select("id, capacity")
+      .in("id", lessonIds);
+    const capacityMap = new Map<string, number>(
+      (lessonRows ?? []).map((l) => [l.id, Number(l.capacity ?? 0)]),
+    );
+    const confirmedCounts = new Map<string, number>();
+    (existing ?? []).forEach((e: { lesson_id: string; is_waitlisted: boolean }) => {
+      if (!e.is_waitlisted) {
+        confirmedCounts.set(e.lesson_id, (confirmedCounts.get(e.lesson_id) ?? 0) + 1);
+      }
+    });
+    let waitlistedCount = 0;
+    for (const r of toInsert) {
+      const cap = capacityMap.get(r.lesson_id) ?? 0;
+      const taken = confirmedCounts.get(r.lesson_id) ?? 0;
+      if (cap > 0 && taken >= cap) {
+        r.is_waitlisted = true;
+        r.deposit_status = "Waitlisted";
+        r.deposit_amount = 0;
+        waitlistedCount += 1;
+      } else {
+        confirmedCounts.set(r.lesson_id, taken + 1);
+      }
+    }
+
     const { error } = await supabase.from("lesson_bookings").insert(toInsert);
     if (error) {
       console.error("lesson_bookings insert", error);
       return false;
     }
+    if (waitlistedCount > 0) {
+      toast.info(
+        waitlistedCount === 1
+          ? "One lesson was full — you've been added to the waitlist."
+          : `${waitlistedCount} lessons were full — you've been added to the waitlist.`,
+      );
+    }
     return true;
   }
+
 
 
   async function loadSavedParticipants() {
@@ -385,10 +426,10 @@ function OnboardingPage() {
           .order("start_time", { ascending: true })
           .limit(50),
         supabase
-          .from("bookings")
+          .from("lesson_bookings")
           .select("lesson_id")
-          .eq("payment_status", "paid")
-          .eq("cancellation_status", "active"),
+          .eq("cancellation_status", "Active")
+          .eq("is_waitlisted", false),
       ]);
       if (cancelled) return;
       if (lessonErr) toast.error(lessonErr.message);
