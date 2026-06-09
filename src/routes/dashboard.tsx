@@ -267,9 +267,15 @@ function DashboardPage() {
                         <Button size="sm" variant="outline" onClick={() => handleCancel(b)}>
                           Cancel Lesson
                         </Button>
-                        <Button size="sm" variant="outline" onClick={() => downloadBookingIcs(b, participantFirst(b.participant_id))}>
-                          <CalIcon className="mr-1 h-3.5 w-3.5" /> Add to Cal
-                        </Button>
+                        <a
+                          href={googleCalendarUrl(b, participantFirst(b.participant_id))}
+                          target="_blank"
+                          rel="noopener noreferrer"
+                        >
+                          <Button size="sm" variant="outline">
+                            <CalIcon className="mr-1 h-3.5 w-3.5" /> Add to Google Calendar
+                          </Button>
+                        </a>
                       </div>
                     </Card>
                   );
