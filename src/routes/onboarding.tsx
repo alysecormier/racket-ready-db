@@ -1563,7 +1563,7 @@ function PaymentStep(props: {
           <div className="mx-auto text-5xl">🎾</div>
           <div className="mt-3 text-2xl font-bold">You're Registered!</div>
           <p className="mt-3 text-sm text-foreground">
-            Thank you, <span className="font-semibold">{props.accountHolder.firstName || "friend"}</span>. Your lesson registration has been received. A confirmation email has been sent to{" "}
+            Thank you, <span className="font-semibold">{props.accountHolder.fullName || "friend"}</span>. Your lesson registration has been received. A confirmation email has been sent to{" "}
             <span className="font-semibold">{props.accountHolder.email}</span>.
           </p>
           <p className="mt-3 text-sm text-muted-foreground">
