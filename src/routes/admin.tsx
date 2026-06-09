@@ -621,7 +621,7 @@ function LessonDialog({ lesson, onClose, onChanged, onDeleted }: {
       supabase.from("waitlist").select("*").eq("lesson_id", currentLesson.id).order("joined_at"),
       supabase
         .from("lesson_bookings")
-        .select("id, participant_id, account_id, deposit_status, is_waitlisted")
+        .select("id, participant_id, account_id, deposit_status, is_waitlisted, payment_method, payment_reference")
         .eq("lesson_id", currentLesson.id)
         .eq("cancellation_status", "Active"),
     ]);
@@ -630,6 +630,7 @@ function LessonDialog({ lesson, onClose, onChanged, onDeleted }: {
     const lbRows = (lb.data ?? []) as Array<{
       id: string; participant_id: string; account_id: string;
       deposit_status: string; is_waitlisted: boolean;
+      payment_method: string | null; payment_reference: string | null;
     }>;
     setBookings(bookingsData);
     setWaitlist(waitlistData);
