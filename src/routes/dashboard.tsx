@@ -92,7 +92,7 @@ function DashboardPage() {
   const [bookings, setBookings] = useState<Booking[]>([]);
   const [participants, setParticipants] = useState<Participant[]>([]);
   const [activeTab, setActiveTab] = useState<string>("all");
-  const [showPast, setShowPast] = useState(false);
+  const [showPast, setShowPast] = useState(true);
   const [showAccount, setShowAccount] = useState(false);
 
   const loadAll = useCallback(async () => {
