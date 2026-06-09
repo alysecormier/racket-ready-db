@@ -775,10 +775,19 @@ function OnboardingPage() {
     phone,
   };
 
+  if (bootstrapping) {
+    return (
+      <div className="min-h-screen flex items-center justify-center bg-gradient-to-br from-background via-secondary/30 to-background">
+        <div className="text-sm text-muted-foreground">Loading…</div>
+      </div>
+    );
+  }
+
   return (
     <div className="min-h-screen bg-gradient-to-br from-background via-secondary/30 to-background">
       <Toaster richColors position="top-center" />
       <div className="mx-auto max-w-2xl px-4 py-8 sm:py-12">
+
         <header className="mb-8 text-center">
           <div className="mb-3 inline-flex h-12 w-12 items-center justify-center rounded-full bg-primary text-primary-foreground shadow-lg">
             <span className="text-2xl">🎾</span>
