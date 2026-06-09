@@ -945,9 +945,9 @@ function LessonDialog({ lesson, onClose, onChanged, onDeleted }: {
 
             <section>
               <h3 className="mb-2 text-sm font-semibold uppercase tracking-wide text-muted-foreground">
-                Attending ({bookings.length})
+                Attending ({bookedCount})
               </h3>
-              {bookings.length === 0 ? (
+              {bookedCount === 0 ? (
                 <p className="text-sm text-muted-foreground">No bookings yet.</p>
               ) : (
                 <div className="space-y-2">
@@ -997,6 +997,22 @@ function LessonDialog({ lesson, onClose, onChanged, onDeleted }: {
                       </div>
                     );
                   })}
+                  {activeLessonBookings.map((r) => (
+                    <div key={r.id} className="rounded-lg border border-border bg-background p-3">
+                      <div className="flex items-start justify-between gap-3">
+                        <div className="min-w-0">
+                          <div className="font-medium">{r.participant_name}</div>
+                          <div className="text-xs text-muted-foreground">
+                            {r.participant_type === "junior" ? "Junior" : "Adult"}
+                            {r.account_email ? ` • ${r.account_email}` : ""}
+                          </div>
+                        </div>
+                        <Badge variant="secondary" className="bg-emerald-100 text-emerald-700">
+                          {r.deposit_status || "Confirmed"}
+                        </Badge>
+                      </div>
+                    </div>
+                  ))}
                 </div>
               )}
             </section>
