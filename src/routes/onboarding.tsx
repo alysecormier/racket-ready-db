@@ -239,7 +239,7 @@ function OnboardingPage() {
   // Persist all selected lessons across all participants as lesson_bookings
   // Persist all selected lessons across all participants as lesson_bookings
   // Returns true on success, false on error
-  async function persistBookings(paymentMethod: string): Promise<boolean> {
+  async function persistBookings(paymentMethod: string, paymentReference: string | null): Promise<boolean> {
     const { data: { user } } = await supabase.auth.getUser();
     if (!user) return false;
     // ensure account-holder participant id
