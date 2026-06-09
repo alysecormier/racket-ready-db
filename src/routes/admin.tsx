@@ -613,34 +613,68 @@ function LessonDialog({ lesson, onClose, onChanged, onDeleted }: {
 
   async function reload(currentLesson: Lesson) {
     setLoading(true);
-    const [b, w] = await Promise.all([
+    const [b, w, lb] = await Promise.all([
       supabase.from("bookings").select("*").eq("lesson_id", currentLesson.id),
       supabase.from("waitlist").select("*").eq("lesson_id", currentLesson.id).order("joined_at"),
+      supabase
+        .from("lesson_bookings")
+        .select("id, participant_id, account_id, deposit_status, is_waitlisted")
+        .eq("lesson_id", currentLesson.id)
+        .eq("cancellation_status", "Active"),
     ]);
     const bookingsData = (b.data ?? []) as (Booking & { stay_for_match_play?: boolean })[];
     const waitlistData = (w.data ?? []) as Waitlist[];
+    const lbRows = (lb.data ?? []) as Array<{
+      id: string; participant_id: string; account_id: string;
+      deposit_status: string; is_waitlisted: boolean;
+    }>;
     setBookings(bookingsData);
     setWaitlist(waitlistData);
 
     const profileIds = Array.from(new Set([
       ...bookingsData.map((x) => x.profile_id),
       ...waitlistData.map((x) => x.profile_id),
+      ...lbRows.map((x) => x.account_id),
     ]));
     const studentIds = Array.from(new Set([
       ...bookingsData.map((x) => x.student_id).filter(Boolean),
       ...waitlistData.map((x) => x.student_id).filter(Boolean),
     ] as string[]));
+    const participantIds = Array.from(new Set(lbRows.map((x) => x.participant_id)));
 
-    const [{ data: pData }, { data: sData }] = await Promise.all([
+    const [{ data: pData }, { data: sData }, { data: partData }] = await Promise.all([
       profileIds.length
         ? supabase.from("profiles").select("*").in("id", profileIds)
         : Promise.resolve({ data: [] }),
       studentIds.length
         ? supabase.from("students").select("*").in("id", studentIds)
         : Promise.resolve({ data: [] }),
+      participantIds.length
+        ? supabase.from("participants").select("id, first_name, last_name, participant_type").in("id", participantIds)
+        : Promise.resolve({ data: [] }),
     ]);
     setProfiles(Object.fromEntries((pData ?? []).map((p: Profile) => [p.id, p])));
     setStudents(Object.fromEntries((sData ?? []).map((s: Student) => [s.id, s])));
+    const partsMap = Object.fromEntries(
+      ((partData ?? []) as Array<{ id: string; first_name: string; last_name: string; participant_type: string }>)
+        .map((p) => [p.id, p]),
+    );
+    const profMap = Object.fromEntries((pData ?? []).map((p: Profile) => [p.id, p]));
+    setLessonBookings(lbRows.map((r) => {
+      const part = partsMap[r.participant_id];
+      const acct = profMap[r.account_id] as Profile | undefined;
+      const name = part ? `${part.first_name} ${part.last_name}`.trim() : (acct?.full_name ?? "Unnamed");
+      return {
+        id: r.id,
+        participant_id: r.participant_id,
+        account_id: r.account_id,
+        deposit_status: r.deposit_status,
+        is_waitlisted: r.is_waitlisted,
+        participant_name: name || "Unnamed",
+        participant_type: part?.participant_type ?? "adult",
+        account_email: acct?.email ?? null,
+      };
+    }));
     setLoading(false);
   }
 
