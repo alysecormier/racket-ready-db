@@ -1683,9 +1683,7 @@ function PaymentConfirm({
   onBack: () => void;
   saving?: boolean;
 }) {
-  const [transactionId, setTransactionId] = useState("");
-  const trimmedTxn = transactionId.trim();
-  const txnTooShort = trimmedTxn.length < 4;
+  const [confirmed, setConfirmed] = useState(false);
 
   const amount = depositAmount.toFixed(2);
   let body: React.ReactNode = null;
