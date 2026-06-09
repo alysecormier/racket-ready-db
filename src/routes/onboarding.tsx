@@ -299,6 +299,7 @@ function OnboardingPage() {
           deposit_amount: l.depositAmount,
           deposit_status: "Confirmed",
           payment_method: paymentMethod,
+          payment_reference: paymentReference,
           payment_reported_at: nowIso,
           policy_acknowledged: true,
           policy_acknowledged_at: nowIso,
