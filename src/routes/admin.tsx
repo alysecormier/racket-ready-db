@@ -575,6 +575,16 @@ function LessonDialog({ lesson, onClose, onChanged, onDeleted }: {
 }) {
   const [bookings, setBookings] = useState<(Booking & { stay_for_match_play?: boolean })[]>([]);
   const [waitlist, setWaitlist] = useState<Waitlist[]>([]);
+  const [lessonBookings, setLessonBookings] = useState<Array<{
+    id: string;
+    participant_id: string;
+    account_id: string;
+    deposit_status: string;
+    is_waitlisted: boolean;
+    participant_name: string;
+    participant_type: string;
+    account_email: string | null;
+  }>>([]);
   const [profiles, setProfiles] = useState<Record<string, Profile>>({});
   const [students, setStudents] = useState<Record<string, Student>>({});
   const [loading, setLoading] = useState(false);
