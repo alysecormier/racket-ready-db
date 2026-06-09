@@ -1021,9 +1021,9 @@ function LessonDialog({ lesson, onClose, onChanged, onDeleted }: {
 
             <section>
               <h3 className="mb-2 text-sm font-semibold uppercase tracking-wide text-muted-foreground">
-                Waitlist ({waitlist.length})
+                Waitlist ({waitlistCount})
               </h3>
-              {waitlist.length === 0 ? (
+              {waitlistCount === 0 ? (
                 <p className="text-sm text-muted-foreground">Empty.</p>
               ) : (
                 <ol className="space-y-2">
@@ -1049,6 +1049,20 @@ function LessonDialog({ lesson, onClose, onChanged, onDeleted }: {
                       </li>
                     );
                   })}
+                  {waitlistedLessonBookings.map((r, i) => (
+                    <li key={r.id} className="flex items-center gap-3 rounded-lg border border-border bg-secondary/30 p-3">
+                      <div className="flex h-7 w-7 items-center justify-center rounded-full bg-primary text-xs font-bold text-primary-foreground">
+                        {waitlist.length + i + 1}
+                      </div>
+                      <div className="flex-1 min-w-0">
+                        <div className="text-sm font-medium truncate">{r.participant_name}</div>
+                        <div className="text-xs text-muted-foreground">
+                          {r.participant_type === "junior" ? "Junior" : "Adult"}
+                          {r.account_email ? ` • ${r.account_email}` : ""}
+                        </div>
+                      </div>
+                    </li>
+                  ))}
                 </ol>
               )}
             </section>
