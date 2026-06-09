@@ -123,20 +123,29 @@ function DashboardPage() {
 
   const today = new Date().toISOString().slice(0, 10);
 
+  // All active (non-cancelled) lessons the user has signed up for
+  const activeBookings = useMemo(
+    () => bookings.filter((b) => b.cancellation_status === "Active"),
+    [bookings],
+  );
   const upcoming = useMemo(
-    () => bookings.filter((b) => b.lesson_date >= today && b.cancellation_status === "Active"),
-    [bookings, today],
+    () => activeBookings.filter((b) => b.lesson_date >= today),
+    [activeBookings, today],
   );
   const past = useMemo(
-    () => bookings.filter((b) => b.lesson_date < today),
-    [bookings, today],
+    () => activeBookings.filter((b) => b.lesson_date < today),
+    [activeBookings, today],
+  );
+  const cancelled = useMemo(
+    () => bookings.filter((b) => b.cancellation_status !== "Active"),
+    [bookings],
   );
 
-  // participants that have at least one upcoming booking
+  // participants that have at least one active booking
   const participantsWithUpcoming = useMemo(() => {
-    const ids = new Set(upcoming.map((b) => b.participant_id));
+    const ids = new Set(activeBookings.map((b) => b.participant_id));
     return participants.filter((p) => ids.has(p.id));
-  }, [upcoming, participants]);
+  }, [activeBookings, participants]);
 
   const visibleUpcoming = useMemo(() => {
     if (activeTab === "all") return upcoming;
