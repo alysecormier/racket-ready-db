@@ -1234,22 +1234,10 @@ function SelectedLessonsSummary({
           variant="outline"
           size="sm"
           className="w-full border-green-600 text-green-700 hover:bg-green-50 dark:text-green-400 dark:hover:bg-green-950/30"
-          onClick={() => downloadIcs(reg, participantFirstName)}
+          onClick={() => setShowGoogle((v) => !v)}
         >
-          <Download className="mr-1 h-3.5 w-3.5" /> 📅 Add to My Calendar
+          <Download className="mr-1 h-3.5 w-3.5" /> 📅 Add to Google Calendar
         </Button>
-        <div className="text-[11px] text-muted-foreground">Or add directly to:</div>
-        <div className="flex flex-wrap gap-1.5">
-          <Button type="button" variant="outline" size="sm" className="text-xs h-7" onClick={() => downloadIcs(reg, participantFirstName)}>
-            🍎 Apple Calendar
-          </Button>
-          <Button type="button" variant="outline" size="sm" className="text-xs h-7" onClick={() => setShowGoogle((v) => !v)}>
-            📅 Google Calendar
-          </Button>
-          <Button type="button" variant="outline" size="sm" className="text-xs h-7" onClick={() => downloadIcs(reg, participantFirstName)}>
-            📆 Outlook
-          </Button>
-        </div>
         {showGoogle && (
           <div className="rounded-md border border-border bg-background p-2 text-xs space-y-1">
             <div className="font-semibold">Add each lesson to Google Calendar:</div>
