@@ -1785,17 +1785,32 @@ function PaymentConfirm({
         {body}
       </div>
 
+      <div className="space-y-1.5 rounded-lg border border-border bg-background p-4">
+        <Label htmlFor="txn-id" className="text-sm font-semibold">
+          Transaction ID / Reference <span className="text-destructive">*</span>
+        </Label>
+        <p className="text-xs text-muted-foreground">
+          After sending payment, paste the confirmation/transaction ID from {method.label} here so we can verify your payment.
+        </p>
+        <Input
+          id="txn-id"
+          value={transactionId}
+          onChange={(e) => setTransactionId(e.target.value.slice(0, 100))}
+          placeholder="e.g. 1234567890ABCD"
+          autoComplete="off"
+        />
+      </div>
+
       <div className="flex flex-col-reverse gap-2 sm:flex-row">
         <Button variant="outline" onClick={onBack} className="flex-1 bg-gray-100 hover:bg-gray-200">
           Go Back
+        </Button>
         <Button
-          onClick={onConfirm}
-          disabled={saving}
+          onClick={() => onConfirm(trimmedTxn)}
+          disabled={saving || txnTooShort}
           className="flex-1 bg-green-600 text-white hover:bg-green-700"
         >
           {saving ? "Saving…" : "I've Paid ✓"}
-        </Button>
-
         </Button>
       </div>
     </div>
