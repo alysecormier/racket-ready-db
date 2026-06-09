@@ -584,7 +584,10 @@ function LessonDialog({ lesson, onClose, onChanged, onDeleted }: {
     participant_name: string;
     participant_type: string;
     account_email: string | null;
+    payment_method: string | null;
+    payment_reference: string | null;
   }>>([]);
+  const [approvingId, setApprovingId] = useState<string | null>(null);
   const [profiles, setProfiles] = useState<Record<string, Profile>>({});
   const [students, setStudents] = useState<Record<string, Student>>({});
   const [loading, setLoading] = useState(false);
