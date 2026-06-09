@@ -93,7 +93,7 @@ In consideration of being permitted to participate in tennis lessons, clinics, p
 
 1. ASSUMPTION OF RISK. Tennis and related athletic activities involve inherent risks. I voluntarily assume all such risks for myself and any minor participants I am registering.
 
-2. RELEASE OF LIABILITY. I hereby release, waive, and discharge the organizer, coaches, employees, agents, and affiliates from any and all claims arising out of or related to any loss, damage, or injury sustained during the Activities, except in cases of gross negligence or willful misconduct.
+2. RELEASE OF LIABILITY. I hereby release, waive, and discharge Alyse Cormier and Coaches, along with their employees, agents, and affiliates, from any and all claims arising out of or related to any loss, damage, or injury sustained during the Activities, except in cases of gross negligence or willful misconduct.
 
 3. MEDICAL TREATMENT. I authorize emergency medical treatment for any participant in my registration if necessary, and I agree to be responsible for any costs incurred.
 
