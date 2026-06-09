@@ -397,6 +397,9 @@ function OnboardingPage() {
         gender: p.gender,
       })),
     );
+  }
+
+
 
   // On mount: if user is already signed in, either redirect to /dashboard
   // or (when ?book=1) hydrate their profile and jump straight to step 1.
