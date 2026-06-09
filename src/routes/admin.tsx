@@ -1003,7 +1003,9 @@ function LessonDialog({ lesson, onClose, onChanged, onDeleted }: {
                       </div>
                     );
                   })}
-                  {activeLessonBookings.map((r) => (
+                  {activeLessonBookings.map((r) => {
+                    const isConfirmed = r.deposit_status === "Confirmed" || r.deposit_status === "Paid";
+                    return (
                     <div key={r.id} className="rounded-lg border border-border bg-background p-3">
                       <div className="flex items-start justify-between gap-3">
                         <div className="min-w-0">
@@ -1012,13 +1014,47 @@ function LessonDialog({ lesson, onClose, onChanged, onDeleted }: {
                             {r.participant_type === "junior" ? "Junior" : "Adult"}
                             {r.account_email ? ` • ${r.account_email}` : ""}
                           </div>
+                          {(r.payment_method || r.payment_reference) && (
+                            <div className="mt-1 text-xs text-muted-foreground">
+                              {r.payment_method ? `Paid via ${r.payment_method}` : "Payment"}
+                              {r.payment_reference ? ` • Ref: ${r.payment_reference}` : ""}
+                            </div>
+                          )}
                         </div>
-                        <Badge variant="secondary" className="bg-emerald-100 text-emerald-700">
-                          {r.deposit_status || "Confirmed"}
+                        <Badge
+                          variant="secondary"
+                          className={isConfirmed ? "bg-emerald-100 text-emerald-700" : "bg-amber-100 text-amber-700"}
+                        >
+                          {isConfirmed ? "Confirmed" : "Pending"}
                         </Badge>
                       </div>
+                      {!isConfirmed && (
+                        <div className="mt-3 flex justify-end">
+                          <Button
+                            size="sm"
+                            disabled={approvingId === r.id}
+                            onClick={async () => {
+                              setApprovingId(r.id);
+                              const { error } = await supabase
+                                .from("lesson_bookings")
+                                .update({ deposit_status: "Confirmed" })
+                                .eq("id", r.id);
+                              setApprovingId(null);
+                              if (error) {
+                                toast.error("Could not approve payment");
+                              } else {
+                                toast.success("Payment approved");
+                                reload(safeLesson);
+                              }
+                            }}
+                          >
+                            {approvingId === r.id ? "Approving…" : "Approve payment"}
+                          </Button>
+                        </div>
+                      )}
                     </div>
-                  ))}
+                    );
+                  })}
                 </div>
               )}
             </section>
