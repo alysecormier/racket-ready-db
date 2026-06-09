@@ -26,6 +26,7 @@ type Booking = {
   lesson_start_time: string | null;
   lesson_end_time: string | null;
   cancellation_status: string;
+  deposit_status: string | null;
   participant_id: string;
 };
 
