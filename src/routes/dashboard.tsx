@@ -189,7 +189,7 @@ function DashboardPage() {
           </Button>
         </header>
 
-        <Link to="/onboarding">
+        <Link to="/onboarding" search={{ book: 1 }}>
           <Button className="mb-6 w-full bg-green-600 hover:bg-green-700 text-white">
             + Book More Lessons
           </Button>
