@@ -244,6 +244,7 @@ export type Database = {
           deposit_amount: number
           deposit_status: string
           id: string
+          is_waitlisted: boolean
           lesson_date: string
           lesson_end_time: string | null
           lesson_id: string
@@ -264,6 +265,7 @@ export type Database = {
           deposit_amount?: number
           deposit_status?: string
           id?: string
+          is_waitlisted?: boolean
           lesson_date: string
           lesson_end_time?: string | null
           lesson_id: string
@@ -284,6 +286,7 @@ export type Database = {
           deposit_amount?: number
           deposit_status?: string
           id?: string
+          is_waitlisted?: boolean
           lesson_date?: string
           lesson_end_time?: string | null
           lesson_id?: string
