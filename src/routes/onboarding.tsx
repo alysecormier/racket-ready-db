@@ -14,6 +14,9 @@ import { useServerFn } from "@tanstack/react-start";
 import { signWaiver } from "@/lib/waiver.functions";
 
 export const Route = createFileRoute("/onboarding")({
+  validateSearch: (search: Record<string, unknown>) => ({
+    book: search.book === "1" || search.book === 1 ? 1 : undefined,
+  }),
   head: () => ({
     meta: [
       { title: "Welcome to 2026 Tennis Lessons" },
