@@ -245,7 +245,12 @@ function DashboardPage() {
                   const d = new Date(b.lesson_date + "T00:00:00");
                   return (
                     <Card key={b.id} className="p-4 border-2 border-green-600/30">
-                      <div className="font-semibold">🎾 {b.lesson_name}</div>
+                      <div className="flex items-start justify-between gap-2">
+                        <div className="font-semibold">🎾 {b.lesson_name}</div>
+                        <span className={`shrink-0 rounded-full px-2 py-0.5 text-xs font-medium ${b.deposit_status === "Confirmed" ? "bg-green-100 text-green-800" : "bg-amber-100 text-amber-800"}`}>
+                          {b.deposit_status === "Confirmed" ? "Confirmed" : "Pending"}
+                        </span>
+                      </div>
                       <div className="text-sm text-muted-foreground">
                         {d.toLocaleDateString(undefined, { weekday: "short", month: "short", day: "numeric" })}
                         {b.lesson_start_time && ` · ${b.lesson_start_time.slice(0, 5)}`}
