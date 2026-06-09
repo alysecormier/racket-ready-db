@@ -1495,16 +1495,30 @@ function PaymentStep(props: {
 
   const total = props.registrations.reduce((s, r) => s + r.participantSubtotal, 0);
 
-  // Memo: "First1, First2 – earliestLessonDate" across all participants' all lessons
+  // Memo: "AccountHolder FullName, Participant1 FullName, … – earliestLessonDate"
   const memoInfo = useMemo(() => {
-    const names = props.registrations.map((r) => r.player.firstName.trim()).filter(Boolean);
+    const accountFull = `${props.accountHolder.firstName} ${props.accountHolder.lastName}`.trim();
+    const participantNames = props.registrations.map((r) => {
+      const first = r.player.firstName.trim();
+      const last = r.player.lastName.trim();
+      const full = `${first} ${last}`.trim();
+      return r.isAccountHolder ? accountFull : full;
+    }).filter(Boolean);
+    // Ensure account-holder full name appears once at the front even if no
+    // registration is flagged as the holder.
+    const seen = new Set<string>();
+    const ordered: string[] = [];
+    if (accountFull) { ordered.push(accountFull); seen.add(accountFull.toLowerCase()); }
+    for (const n of participantNames) {
+      if (!seen.has(n.toLowerCase())) { ordered.push(n); seen.add(n.toLowerCase()); }
+    }
     const allDates = props.registrations.flatMap((r) => r.lessons.map((l) => l.lessonDateTime)).filter(Boolean).sort();
     const earliest = allDates[0];
     const dateStr = earliest
       ? new Date(earliest).toLocaleDateString(undefined, { month: "long", day: "numeric" })
       : "";
-    return { names, dateStr, memo: `${names.join(", ")} – ${dateStr}` };
-  }, [props.registrations]);
+    return { names: ordered, dateStr, memo: `${ordered.join(", ")} – ${dateStr}` };
+  }, [props.registrations, props.accountHolder]);
 
   function downloadAllSessionIcs() {
     for (const r of props.registrations) {
