@@ -1667,7 +1667,7 @@ function MemoBlock({ names, date }: { names: string[]; date: string }) {
 function PaymentConfirm({
   method,
   depositAmount,
-  memo,
+  memo: _memo,
   memoNames,
   memoDate,
   onConfirm,
@@ -1679,10 +1679,13 @@ function PaymentConfirm({
   memo: string;
   memoNames: string[];
   memoDate: string;
-  onConfirm: () => void;
+  onConfirm: (transactionId: string) => void;
   onBack: () => void;
   saving?: boolean;
 }) {
+  const [transactionId, setTransactionId] = useState("");
+  const trimmedTxn = transactionId.trim();
+  const txnTooShort = trimmedTxn.length < 4;
 
   const amount = depositAmount.toFixed(2);
   let body: React.ReactNode = null;
