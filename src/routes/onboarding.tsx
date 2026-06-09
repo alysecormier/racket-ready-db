@@ -269,6 +269,7 @@ function OnboardingPage() {
       deposit_amount: number;
       deposit_status: string;
       payment_method: string;
+      payment_reference: string | null;
       payment_reported_at: string;
       policy_acknowledged: boolean;
       policy_acknowledged_at: string;
